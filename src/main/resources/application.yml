@@ -1,0 +1,58 @@
+# GameVault —— 游戏展示与试玩平台（设计 docs/design/01 §8）
+# 生产由 systemd EnvironmentFile=/etc/gamevault.env（0600）注入。
+# 端口 8094：llm=8090 / easypcb=8091 / easypcb-sandbox=8092 / sysou-manage=8093，勿冲突。
+# nginx 剥 /game 前缀后转发到本服务（location /game/api/ → proxy_pass http://127.0.0.1:8094/），
+# 故本服务**不设 context-path**，对外路径即 /api/**。
+server:
+  port: 8094
+  servlet:
+    multipart:
+      max-file-size: 100MB      # 游戏包上限（docs/design/02 §3.2）
+      max-request-size: 105MB
+
+spring:
+  application:
+    name: gamevault
+  datasource:
+    # 生产：VPS PostgreSQL 独立 database gamevault（01 文档 §8 部署事实）
+    url: ${GAMEVAULT_DB_URL:jdbc:postgresql://127.0.0.1:5432/gamevault}
+    username: ${GAMEVAULT_DB_USER:gamevault}
+    password: ${GAMEVAULT_DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate        # 结构只由 Flyway 管；validate 失败=代码与迁移不一致，启动即炸
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${GAMEVAULT_REDIS_HOST:127.0.0.1}
+      port: ${GAMEVAULT_REDIS_PORT:6379}
+      password: ${GAMEVAULT_REDIS_PASSWORD:}
+      database: ${GAMEVAULT_REDIS_DB:3}   # 生产 db3（Weaveora db0/1、EasyPCB db2、sysou-manage db2/3-dev 已占用核对见 01 文档 §8）
+
+gamevault:
+  # 游戏包目录（01 文档 §8 部署事实：生产 /var/www/gamevault/*）
+  games-dir: ${GAMEVAULT_GAMES_DIR:./data/games}
+  staging-dir: ${GAMEVAULT_STAGING_DIR:./data/staging}
+  archive-dir: ${GAMEVAULT_ARCHIVE_DIR:./data/archive}
+  # 发布后探针（02 文档 §6.4）：回环请求 nginx，断言 200 + COOP/COEP 头；dev 默认关
+  nginx-probe:
+    enabled: ${GAMEVAULT_NGINX_PROBE_ENABLED:false}
+    base-url: ${GAMEVAULT_NGINX_PROBE_BASE:http://127.0.0.1}
+  jwt:
+    # sysou-manage 中心 JWKS（ES256/EC P-256）；M1 验签记日志不拦截，M2 启用拦截（01 文档 §7）
+    jwks-url: ${GAMEVAULT_JWKS_URL:http://127.0.0.1:8093/manage/api/jwks}
+    issuer: ${GAMEVAULT_JWT_ISSUER:}    # 空 = 暂不校验 iss（M2：中心注册 gamevault 应用后填入）
+    key-ttl-min: 60
+  admin:
+    # M1：管理台端点拦截未启用（01 文档 §11-4「M1 可先放行 + 记录」），仅记日志；
+    # M2 中心注册 gamevault 权限点后此开关随 M2 一并删除，改中心 RBAC 硬拦截。
+    enforce-auth: ${GAMEVAULT_ADMIN_ENFORCE_AUTH:false}
+
+logging:
+  level:
+    com.sysou.gamevault: INFO

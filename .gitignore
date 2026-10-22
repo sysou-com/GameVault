@@ -1,0 +1,33 @@
+# Java / Maven
+target/
+*.class
+*.jar
+!**/lib/*.jar
+
+# Node / 前端
+node_modules/
+dist/
+*.tsbuildinfo
+
+# 构建产物（游戏包 zip 不入库，走管理台发布）
+*.zip
+!deploy/**/*.zip
+
+# Godot
+.godot/
+export_debug/
+
+# 环境与密钥（红线：密钥不进仓库）
+*.env
+.env.*
+keys/
+*.pem
+*.p12
+
+# IDE / 系统
+.idea/
+.vscode/
+*.iml
+.DS_Store
+nul
+grep.exe.stackdump
