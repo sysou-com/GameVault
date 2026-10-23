@@ -1,0 +1,16 @@
+{
+  "name": "reflex-rush",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/update-manifest.mjs",
+    "test": "node --test test/",
+    "zip": "node scripts/zip.mjs"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.2",
+    "vite": "^6.0.5"
+  }
+}

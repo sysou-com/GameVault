@@ -1,0 +1,67 @@
+{
+  "schema": "gamevault/manifest@1",
+  "game": "reflex-rush",
+  "version": "1.0.1",
+  "title": "极速反应",
+  "engine": "canvas-native",
+  "language": "typescript",
+  "entry": "index.html",
+  "cover": "cover.svg",
+  "size": {
+    "totalBytes": 13939,
+    "initialLoadBytes": 13939,
+    "maxAssetBytes": 200000000
+  },
+  "viewport": {
+    "base": [
+      960,
+      540
+    ],
+    "scale": "fit",
+    "touch": true
+  },
+  "score": {
+    "enabled": true,
+    "range": [
+      0,
+      9999
+    ],
+    "unit": "分",
+    "higherIsBetter": true,
+    "metaSchema": {
+      "perfect": {
+        "type": "int",
+        "range": [
+          0,
+          12
+        ]
+      },
+      "streak": {
+        "type": "int",
+        "range": [
+          0,
+          12
+        ]
+      },
+      "avgDeviationMs": {
+        "type": "float",
+        "range": [
+          0,
+          10000
+        ]
+      },
+      "expertMode": {
+        "type": "bool"
+      }
+    },
+    "minPlayMs": 3000
+  },
+  "saves": {
+    "localStoragePrefix": "reflexrush.",
+    "maxBytes": 204800
+  },
+  "audio": {
+    "requiresGesture": true
+  },
+  "notes": "原生 Canvas 2D + WebAudio 合成音，零图片/字体/音频资产，零运行时依赖。判定用 performance.now() 事件时戳（消除一帧抖动）；结算展示逐拍偏差 ms 明细（数据透明=公信力）。专家节奏：连续 3 局 PERFECT≥60% 解锁（间隔下限 0.7s + 1 拍假环）。技术拆解见管理台发布后回填的 tech_notes_url。"
+}

@@ -110,14 +110,17 @@ public class PackageProcessor implements JobHandler {
     }
 
     private void extract(Path zipFile, Path outDir) throws IOException {
+        // Windows 陷阱：Path.of("./x") 保留 "." 前缀而 normalize() 会移除 → startsWith 误判 zip-slip；
+        // 比较两侧统一 toAbsolutePath().normalize()（02 文档 §6.2 二次防护）
+        Path base = outDir.toAbsolutePath().normalize();
         try (var zin = new ZipInputStream(Files.newInputStream(zipFile))) {
             ZipEntry e;
             while ((e = zin.getNextEntry()) != null) {
-                Path target = outDir.resolve(e.getName()).normalize();
                 // zip-slip 二次防护（校验器已查过，解压再查一层）
-                if (!target.startsWith(outDir)) {
+                if (!isSafeExtraction(base, e.getName())) {
                     throw new IOException("zip-slip: " + e.getName());
                 }
+                Path target = base.resolve(e.getName()).normalize();
                 if (e.isDirectory()) {
                     Files.createDirectories(target);
                 } else {
@@ -127,6 +130,12 @@ public class PackageProcessor implements JobHandler {
                 zin.closeEntry();
             }
         }
+    }
+
+    /** zip-slip 判定（包内相对路径 = 安全；绝对路径 / ../ 逃逸 = 拒绝）。两侧统一 absolute+normalize。 */
+    static boolean isSafeExtraction(Path baseDir, String entryName) {
+        Path base = baseDir.toAbsolutePath().normalize();
+        return base.resolve(entryName).normalize().startsWith(base);
     }
 
     private void markFailed(String idempotencyKey, String reason) {

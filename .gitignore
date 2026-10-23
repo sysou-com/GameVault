@@ -13,6 +13,9 @@ dist/
 *.zip
 !deploy/**/*.zip
 
+# 本地运行时数据（dev 后端解压/暂存的游戏包）
+data/
+
 # Godot
 .godot/
 export_debug/
