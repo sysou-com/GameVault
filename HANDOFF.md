@@ -1,9 +1,9 @@
-# HANDOFF — 会话交接（2026-10-23，M1+M2 生产已上线；游戏 A dev 全链完成，待生产 GO）
+# HANDOFF — 会话交接（2026-10-23，M1+M2+游戏 A 生产均已上线；移动端适配已部署；下一步 M3）
 
 > 新会话开场协议：先 `git fetch origin && git status -sb` 同步 → 读 `CLAUDE.md`（红线+入口）→
 > 读本文件（当前状态）→ 按任务读 `docs/design/` 对应章节。**冲突优先级：用户裁定 > docs/design > 本文件 > 代码现状。**
 
-## 一、当前状态（M1 ✅ 上线；M2 ✅ 2026-10-23 生产上线，签名 JWT + 中心 RBAC 全链路验收通过）
+## 一、当前状态（M1 ✅ 上线；M2 ✅ 生产上线；游戏 A「霓虹突袭」✅ 2026-10-23 生产上线；移动端适配 ✅ 已部署）
 
 **生产已跑通**（https://sysou.com/game/ → 308 → www.sysou.com/game/，M1 状态）：
 - 后端 `gamevault.service`（systemd，`/opt/java21/current` JVM，127.0.0.1:8094，PG 生产库 `gamevault`，Redis db4）
@@ -20,11 +20,16 @@
 - `733c52f` M2 RBAC：PermCache 回源中心 /manage/internal/perms（pv 缓存，降级旧快照/最小权限）
   + AdminController 按端点硬校 3 个 gamevault:admin:* 点（enforce-auth=true 时）+ /api/me/perm
   （浏览器走应用侧，前端管理台导航门控）
-- **游戏 A「霓虹突袭」v1.0.0 dev 全链完成（2026-10-23，待生产 GO，见 §五/§八）**：
+- **游戏 A「霓虹突袭」v1.0.0 ✅ 生产上线（2026-10-23，见 §八执行记录）**：
   Phaser 4.2.1 + TS + Vite，零外部资产（运行时纹理 + WebAudio 合成，03 文档 §6 已回写）；
-  包体 1.73MB（zip 387KB）；单测 9/9 + 浏览器实机泡测 3 关全程零报错 + dev 平台
-  （上传 6d7be0942827→校验 ok→发布 v1.0.0→上架→iframe 试玩→桥握手→假 JWT 提分 401 优雅失败）。
+  包体 1.73MB（zip 387KB）；生产包 568208843b13 → ready → publish → enable；
+  生产验收全绿：详情 API（sha256 与 dev 构建一致 8bfdb3fe…）、真实登录 JWT 提分 rank=1 + 周/总榜 +
+  成就 FIRST_CLEAR/COMBO_30 解锁、匿名 401、浏览器桌面+移动模拟（390px）零报错、全屏/横屏按钮在位。
   踩坑（v4 renderType/粒子/TextStyle + 精英前缀/扫掠碰撞/场景字段残留）全见 03 文档 §6。
+- **移动端适配 ✅ 生产部署（2026-10-23，`d863e69`）**：App.vue 汉堡菜单（≤760px，blur 卡片下拉 +
+  遮罩 + 48px 触控）；GameFrame「全屏」按钮（容器级 requestFullscreen + 触屏竖屏横屏提示 +
+  Android orientation.lock 尝试）；全局留白压缩/表格横滚/详情页缩排；
+  chrome-devtools 移动模拟验收（汉堡开合、全屏 370×208→390×844、横屏 844×390 满屏、桌面回归）。
 - sysou-manage `a7ea44c`（已推 origin/main）：AppCodes +GAMEVAULT + `V14__gamevault.sql`
   （app_client + gamevault_user/gamevault_admin + 3 api 点 + 1 menu 点）；**dev 中心库已应用并验证**
 - 测试：52 单测 + PlatformIT 2（含「本地 JWKS + 本地 /perms 模拟中心」的签名 JWT 全链路：
@@ -36,10 +41,10 @@
 **dev 环境（本地 Windows）**：
 - 隧道：PG 54329→VPS:5432、Redis 6380→VPS:6379（`plink`/`ssh` 自建，断了要重拉）
 - dev 库 `gamevault_dev`（角色 `gamevault_dev`；2026-10-23 从 `gamevault` 改名拆分，`.env.dev` 已同步）
-- 启动（均已验证）：
+- 启动（唯一权威脚本 `deploy/dev-start.sh`，2026-10-23 事故后重写；/tmp/gv-dev-start*.sh 弃用）：
   ```bash
-  # 后端（需先 source .env.dev 并映射 GAMEVAULT_* 环境变量，REDIS_DB=6，GAMES_DIR=./data/games）
-  java -jar target/gamevault.jar
+  bash deploy/dev-start.sh   # PG 隧道 54329 + Redis 隧道 6380 + GAMEVAULT_REDIS_DB=6 + 本地 JWKS + enforce-auth=false
+  ```
   # 前端（5173；vite 只绑 [::1]，用 http://[::1]:5173/game/ 访问）
   cd web && npm run dev
   # 游戏包静态（vite /game/g 代理的 8095 源）
@@ -53,8 +58,8 @@
    前端 `session.ts`（`sysou.session` 共享 + `gamevault.session` 防污染）+ 登录弹窗；
    **生产已启用**：中心 V14 已应用（Flyway max=14）、`gamevault:` 内部令牌已配、GameVault env 三行已配（enforce-auth=true）。
 2. ✅ **排行榜/成就**：leaderboard + achievement 模块（01 §6 全链）；管理台 needsReview 发布闸门已落。
-3. ✅ **游戏 A「霓虹突袭」**（Phaser 4，`docs/design/03`）——**2026-10-23 dev 全链完成**（代码 `games/neon-raid/`，
-   提交见 §五）：零资产路线 + v4.2.1 踩坑回写已进 03 文档 §6；**生产部署待用户 GO**（§八）。
+3. ✅ **游戏 A「霓虹突袭」**（Phaser 4，`docs/design/03`）——**2026-10-23 生产上线**（§八 执行记录）；
+   移动端触控真机（Android Chrome）验收待用户实际手机跑一遍（02 文档 §8 清单），模拟验收已过。
 4. ✅ **管理台 RBAC**：PermCache 回源 + 端点硬校 + /api/me/perm（§5.3/§7 已回填实装）；
    版本回滚 UI：Admin.vue 已有 rollback 按钮（对 rolled_back 版本再发布）；自动回滚：探针失败自动回 prev live（发布路径内）。
 5. ⛔ 遥测表 `play_event_daily` 聚合 Job 是 **M3**，别提前做。
@@ -88,8 +93,9 @@ ssh root@sysou.com 'tail /var/log/nginx/error.log'
 ## 五、未完成/遗留
 
 - [x] ~~**生产部署 M2**~~ **✅ 2026-10-23 完成**（中心 V14 + 令牌 env → GameVault env → deploy.sh → SMOKE PASS → 签名 JWT 验收全绿，见 §六）
-- [ ] **游戏 A 生产部署**（§八，待用户 GO）：上传 zip → 校验 → 发布 → 上架 → 生产 iframe 实机 + 登录提分 smoke
-- [ ] 游戏 A 移动端触控真机验收（02 文档 §8 清单，Android Chrome）——M2 内做，可随生产部署后一起验
+- [x] ~~**游戏 A 生产部署**~~ **✅ 2026-10-23 完成**（见 §八 执行记录）
+- [ ] 游戏 A 移动端触控真机验收（Android Chrome，02 文档 §8 清单）——浏览器模拟已过，待用户实际手机跑一遍（横屏/全屏/触屏操控/震动感）
+- [ ] 游戏 A 生产分数/成就数据清理（smoke 提交过 2 条：rbac-it@sysou.com 99999 + 12345，成就 FIRST_CLEAR/COMBO_30；留作展示或等用户示下再清）
 - [x] ~~01 文档 §10 ArchUnit 模块边界测试、@WebMvcTest 假 JWT 测试~~ —— M2 已用更硬的替代：
   PlatformIT 本地 JWKS + 本地 /perms 模拟中心，签名 JWT 全链路（含 RBAC 401/403）覆盖验签/回源真实路径
 - [ ] 首页暂无「搜索/筛选」（06 游戏全量后需要）；`play_event_daily` 埋点（M3）
@@ -104,6 +110,13 @@ ssh root@sysou.com 'tail /var/log/nginx/error.log'
 - 中心账号 id 是 **UUID**（sysou-manage V1）——任何 user_id 列都是 TEXT（V2 已改），别写回 BIGINT。
 - 生产启用 RBAC 前，中心必须先有 V14（AppCodes 无 gamevault 会 UNKNOWN_APP 400）+ MANAGE_INTERNAL_TOKENS 有 gamevault: 项。
 - **issuer 陷阱（2026-10-23 生产实踩）**：GameVault 验签的 `GAMEVAULT_JWT_ISSUER` 必须与中心签 JWT 的 `MANAGE_JWT_ISSUER` **逐字符一致**——中心实际值是 `https://www.sysou.com/manage/api`（**含 /api**，见中心 env），只配 `/manage` 会导致全体用户 401。以中心 env 文件为准抄，别按文档猜。
+- **Redis db 交叉污染事故（2026-10-23 生产实踩，严重）**：旧 dev 启动参数 `--gamevault.redis.database=6` 是**不存在的属性**
+  （Redis db 实际绑定 `spring.data.redis.database` ← env **`GAMEVAULT_REDIS_DB`**，默认 4）→ dev 后端连进**生产 db4**，
+  其 JobConsumer（同名消费组 `gamevault`）抢消费生产 Job：生产上传的包被 dev 侧「staging 文件缺失」标失败并静默 ACK
+  （job:done 被 dev 时钟写入、生产侧永远看不到 handler 日志）。**防再犯**：dev 只用 `deploy/dev-start.sh`
+  （`GAMEVAULT_REDIS_DB=6`）；判断隔离是否生效看 `redis-cli -n 6 XINFO GROUPS gamevault:jobs`（db6）而非 db4。
+- **GameFrame iframe `allow` 属性（2026-10-23）**：`pointer-lock` 是 sandbox 特性（`allow-pointer-lock`），
+  不是 Permissions-Policy 特性——写进 `allow=` 会触发 Chrome 警告「Unrecognized feature: pointer-lock」；本类游戏（触屏/键盘）也不需要指针锁定，`ALLOW='autoplay'` 即可。
 
 ## 六、生产部署 M2（✅ 2026-10-23 完成；留档备查）
 
@@ -131,12 +144,19 @@ ssh root@sysou.com 'tail /var/log/nginx/error.log'
 M3：游戏 B（方块狂奔 Three.js）+ 运营统计（`play_event_daily` 聚合 Job）+ 云存档（user_save 已有表，存档 API）。
 M4：游戏 C（地牢回声 Godot 4.6 WASM）+ COOP/COEP 加固。M5（二期）：游戏 E WebSocket 对战。
 
-## 八、游戏 A 生产部署清单（待用户 GO）
+## 八、游戏 A 生产部署（✅ 2026-10-23 完成；留档备查）
 
-影响面：纯增量（新增 `/var/www/gamevault/games/neon-raid/1.0.0/` + DB game/version 两行），不动既有游戏/配置；可回滚 = 管理台 disable 游戏（无数据删除）。
+**执行记录**：
+1. ✅ 上传：zip scp 上 VPS → VPS 上用生产 JWKS 私钥签 `pa=true` 管理员 JWT（Signer.class 在 VPS `/tmp/jwtsign`，用完即删）→
+   `POST /api/admin/packages` → 轮询至 `jobStatus=done, versionStatus=ready, needsReview=false`（生产包 **568208843b13**，versionId=2）
+2. ✅ `POST /api/admin/versions/2/publish` + `POST /api/admin/games/neon-raid/enable`（新游戏默认 draft）；
+   落盘 `/var/www/gamevault/games/neon-raid/1.0.0/`（4 文件）
+3. ✅ 验收：`GET /api/games/neon-raid`（liveVersion sha256=`8bfdb3fe…` 与 dev 构建一致）；
+   真实登录 JWT 提分 12345 → rank=1，99999 → rank=1 + **成就解锁 [FIRST_CLEAR, COMBO_30]**；
+   周/总榜均见分；匿名 `POST /api/scores` 401；浏览器桌面+移动模拟（390×844）零 console error；
+   全屏/横屏提示在位；`deploy.sh` SMOKE PASS（含 /game/g/neon-raid/1.0.0/cover.svg 200）
+4. ✅ 清理：VPS `/tmp/jwtsign`、`/tmp/neon-raid-1.0.0.zip` 已删；本地临时 json 已删
 
-1. 上传：`scp build/neon-raid-1.0.0.zip` 到 VPS → `curl -F file=@... https://www.sysou.com/game/api/admin/packages`（需 `gamevault:admin:package` 权限 JWT；M2 验收已证 401/403/200 分层生效）
-2. 轮询 `GET /game/api/admin/packages/{id}` 至 `jobStatus=done`（探针在 VPS 无头环境跑 v4 渲染器探测——若探针环境无头无 WebGL，注意渲染器 fallback CANVAS 路径已内置）
-3. `POST /game/api/admin/versions/{id}/publish`（needsReview=false 直发）→ `POST /game/api/admin/games/neon-raid/enable`（新游戏默认 draft，必须 enable 才上架）
-4. 验收：生产 iframe 实机试玩（Phaser banner 出现、菜单可点）+ 登录账号提分（真实中心 JWT，榜单可见 + 成就 FIRST_CLEAR 若 wavesCleared≥5）+ 未登录提分 401
-5. 遗留提醒：生产 JWKS 私钥 `/etc/sysou-manage/keys/jwt-priv.pem` 无本地备份（用户已被告知离线加密备份）
+**遗留提醒**：生产 JWKS 私钥 `/etc/sysou-manage/keys/jwt-priv.pem` 已有用户授权本地备份
+（`D:\workspace\sysou-manage\keys\production-backup\jwt-priv.pem`，gitignored，勿提交/勿打印）；
+建议后续再加一层加密离线备份。

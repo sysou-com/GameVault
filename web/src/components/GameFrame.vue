@@ -76,7 +76,8 @@ const props = defineProps<{
 
 // sandbox 合法 flag 不含 allow-autoplay（autoplay 走 allow 特性策略，HTML 规范）；不给 allow-top-navigation（游戏不能劫持顶层页）
 const SANDBOX = 'allow-scripts allow-same-origin allow-pointer-lock allow-popups-to-escape-sandbox'
-const ALLOW = 'pointer-lock; autoplay'
+// 注意：pointer-lock 是 sandbox 特性（已在 SANDBOX），不是 Permissions-Policy 特性，放进 allow 会触发浏览器警告；本类游戏（触屏/键盘）也不需要指针锁定
+const ALLOW = 'autoplay'
 
 type State = 'loading' | 'ready' | 'timeout' | 'error'
 const frameRef = ref<HTMLIFrameElement | null>(null)
