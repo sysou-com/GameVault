@@ -31,3 +31,4 @@ keys/
 .DS_Store
 nul
 grep.exe.stackdump
+.pi/
