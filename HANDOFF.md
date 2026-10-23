@@ -3,7 +3,7 @@
 > 新会话开场协议：先 `git fetch origin && git status -sb` 同步 → 读 `CLAUDE.md`（红线+入口）→
 > 读本文件（当前状态）→ 按任务读 `docs/design/` 对应章节。**冲突优先级：用户裁定 > docs/design > 本文件 > 代码现状。**
 
-## 一、当前状态（M1 ✅ 上线；M2 ✅ 生产上线；游戏 A「霓虹突袭」✅ 2026-10-23 生产上线；移动端适配 ✅ 已部署；游戏 B「方块狂奔」✅ **v1.1.0（W3「优」视觉包 + W4「奇」节拍系统）2026-10-23 生产上线**）
+## 一、当前状态（M1 ✅ 上线；M2 ✅ 生产上线；游戏 A「霓虹突袭」✅ **v1.1.0 生产上线（2026-10-23，修复生产点不动根因+元素×1.4）**；移动端适配 ✅ 已部署；游戏 B「方块狂奔」✅ **v1.1.0（W3「优」视觉包 + W4「奇」节拍系统）2026-10-23 生产上线**）
 
 **生产已跑通**（https://sysou.com/game/ → 308 → www.sysou.com/game/，M1 状态）：
 - 后端 `gamevault.service`（systemd，`/opt/java21/current` JVM，127.0.0.1:8094，PG 生产库 `gamevault`，Redis db4）
@@ -30,7 +30,18 @@
   遮罩 + 48px 触控）；GameFrame「全屏」按钮（容器级 requestFullscreen + 触屏竖屏横屏提示 +
   Android orientation.lock 尝试）；全局留白压缩/表格横滚/详情页缩排；
   chrome-devtools 移动模拟验收（汉堡开合、全屏 370×208→390×844、横屏 844×390 满屏、桌面回归）。
+- **游戏 A「霓虹突袭」v1.1.0 ✅ 生产上线（2026-10-23，`5f5426b`，用户生产试玩反馈后修复）**：
+  ① **生产「框内点不开始」根因 = Phaser v4 Container 子件坐标是局部坐标**：v1.0.0 makeBtn 在 (x,y)
+  创建 rect 又放容器 (x,y) → 世界坐标 (2x,2y) 飞出屏幕（结算页「再来一局」不可见不可点）；
+  修：子件从 (0,0) 创建。② Menu 加 320×76 显式「开始突袭」大按钮（原来只有左侧关卡 tile 隐式开始）；
+  ③ 暂停层加 继续/重开本局/返回菜单 三按钮（框内可重开）+ 触控 ⏸ 键；④ 元素整体×1.4（用户「适当调大」）。
+  发布：zip 396412B → packageId=67ce9609d194 → ready → publish → LIVE 1.1.0
+  （sha256 `d8f741ea…` 与本地逐字节一致）；生产 iframe 实点「开始」→ play ✓ 零 console 报错 ✓。
+  竖屏体验（用户提议）：横版 16:9 在竖屏手机被宽度锁死（scale≈0.41），实体放大后仍偏小；
+  真竖屏需竖版布局重设计（玩法层），已留 03 文档 §8 待用户决策。
+  单测 9/9、tsc 0 错；全链路浏览器验收（泵驱动）：开始→阵亡→结算→再来一局→暂停→重开。
 - sysou-manage `a7ea44c`（已推 origin/main）：AppCodes +GAMEVAULT + `V14__gamevault.sql`
+  （app_client + gamevault_user/gamevault_admin + 3 api 点 + 1 menu 点）；**dev 中心库已应用并验证**
   （app_client + gamevault_user/gamevault_admin + 3 api 点 + 1 menu 点）；**dev 中心库已应用并验证**
 - **2026-10-23 用户试玩反馈 + 「优/奇」质量标准（设计文档已修订，见 §九）**：游戏 D「太简单没可玩性」、
   游戏 B「画面粗糙只有方块/长条/圆，比不过同类 XX 快跑」→ 00 文档 §3.4 新增标准 + 5 份游戏文档修订
@@ -63,6 +74,7 @@
    **生产已启用**：中心 V14 已应用（Flyway max=14）、`gamevault:` 内部令牌已配、GameVault env 三行已配（enforce-auth=true）。
 2. ✅ **排行榜/成就**：leaderboard + achievement 模块（01 §6 全链）；管理台 needsReview 发布闸门已落。
 3. ✅ **游戏 A「霓虹突袭」**（Phaser 4，`docs/design/03`）——**2026-10-23 生产上线**（§八 执行记录）；
+   **v1.1.0（2026-10-23，`5f5426b`）：修复生产「框内点不开始」（v4 容器坐标双重叠加）+ 显式开始按钮 + 元素×1.4，已发布**；
    移动端触控真机（Android Chrome）验收待用户实际手机跑一遍（02 文档 §8 清单），模拟验收已过。
 4. ✅ **管理台 RBAC**：PermCache 回源 + 端点硬校 + /api/me/perm（§5.3/§7 已回填实装）；
    版本回滚 UI：Admin.vue 已有 rollback 按钮（对 rolled_back 版本再发布）；自动回滚：探针失败自动回 prev live（发布路径内）。
