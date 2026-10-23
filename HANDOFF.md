@@ -1,16 +1,32 @@
-# HANDOFF — 会话交接（2026-10-23，M1 已部署上线）
+# HANDOFF — 会话交接（2026-10-23，M1 已上线；M2 后端/前端/RBAC 本地全绿，待生产部署 + 游戏 A）
 
 > 新会话开场协议：先 `git fetch origin && git status -sb` 同步 → 读 `CLAUDE.md`（红线+入口）→
 > 读本文件（当前状态）→ 按任务读 `docs/design/` 对应章节。**冲突优先级：用户裁定 > docs/design > 本文件 > 代码现状。**
 
-## 一、当前状态（M1 ✅ 上线）
+## 一、当前状态（M1 ✅ 上线；M2 本地完成，待生产部署）
 
-**生产已跑通**（https://sysou.com/game/ → 308 → www.sysou.com/game/）：
+**生产已跑通**（https://sysou.com/game/ → 308 → www.sysou.com/game/，M1 状态）：
 - 后端 `gamevault.service`（systemd，`/opt/java21/current` JVM，127.0.0.1:8094，PG 生产库 `gamevault`，Redis db4）
 - 前端 `/var/www/gamevault/static/`（nginx 服务，apex 纯 308 块、真内容在 **www.sysou.com 443 块**）
 - 游戏 D「极速反应」v1.0.1 已发布上架，浏览器实机试玩通过（判定/命/结算/连击/本地记录）
-- `deploy/smoke.sh` 全绿（COOP/COEP 作用域隔离已验证，兄弟前缀未带头）
-- 生产数据：`gamevault` 库 1 游戏（reflex-rush）+ 1 live 版本；`/var/www/gamevault/games/reflex-rush/1.0.1/`
+- 生产数据：`gamevault` 库 1 游戏（reflex-rush）+ 1 live 版本（V2 迁移 user_id→UUID 随 M2 部署落）
+
+**M2 本地全绿（2026-10-23，已推 origin/master）**：
+- `9392c94` M2 后端：leaderboard（ZSET 总/周榜 + 幂等 + 限流 + flagged P99×5 + settle Job + 周归档）
+  + achievement（manifest 同步 + 提交时同步求值）+ 登录门禁（/api/scores、/api/me/** 硬 401）
+  + needsReview 发布闸门 + 探针失败自动回滚 + V2__m2_userid_uuid（user_id BIGINT→TEXT/UUID，中心账号是 UUID）
+- `85f576d` M2 前端：登录（中心 SSO `sysou.session`）+ 榜单页 + 提分链路（GameFrame 模式二代发）
+  + 管理台 M2（needsReview 确认/flagged 复核）+ vue-tsc 入构建
+- `733c52f` M2 RBAC：PermCache 回源中心 /manage/internal/perms（pv 缓存，降级旧快照/最小权限）
+  + AdminController 按端点硬校 3 个 gamevault:admin:* 点（enforce-auth=true 时）+ /api/me/perm
+  （浏览器走应用侧，前端管理台导航门控）
+- sysou-manage `a7ea44c`（已推 origin/main）：AppCodes +GAMEVAULT + `V14__gamevault.sql`
+  （app_client + gamevault_user/gamevault_admin + 3 api 点 + 1 menu 点）；**dev 中心库已应用并验证**
+- 测试：52 单测 + PlatformIT 2（含「本地 JWKS + 本地 /perms 模拟中心」的签名 JWT 全链路：
+  验签→提分→榜→settle→成就→RBAC 401/403/200；`-Dgamevault.it.enabled=true -Dtest=PlatformIT`）
+
+**生产启用顺序（待 GO，见 §六）**：中心部署（V14 + MANAGE_INTERNAL_TOKENS 补 gamevault: 项）
+→ GameVault env 填 `GAMEVAULT_JWT_ISSUER=https://www.sysou.com/manage` / `GAMEVAULT_INTERNAL_TOKEN=同值` / `GAMEVAULT_ADMIN_ENFORCE_AUTH=true` → `deploy/deploy.sh` → smoke。
 
 **dev 环境（本地 Windows）**：
 - 隧道：PG 54329→VPS:5432、Redis 6380→VPS:6379（`plink`/`ssh` 自建，断了要重拉）
@@ -26,16 +42,16 @@
   ```
 - dev 里已有数据：`it-rush`（IT 假数据）+ `reflex-rush`（1.0.0/1.0.1）
 
-## 二、M2 开工清单（按 01 文档 §11 排期）
+## 二、M2 开工清单（按 01 文档 §11 排期；✅ = 2026-10-23 本地完成）
 
-1. **登录接入**：sysou-manage 中心注册 `gamevault` 应用（拿 issuer/apps/权限点）→
-   `GAMEVAULT_JWT_ISSUER` 填入生产 env + `GAMEVAULT_ADMIN_ENFORCE_AUTH=true`；
-   前端 GameFrame 登录态（`gamevault.session` 已有位）→ 提分 API。
-2. **排行榜/成就**：`leaderboard` 模块（01 §5.3/§6：ZSET 榜 + `score_submission` 幂等 + 限流 + flagged 规则纯函数）；
-   管理台 `needsReview` 发布门禁。
-3. **游戏 A「霓虹突袭」**（Phaser 4，`docs/design/03`）——先查 Phaser 4 当前版本文档（红线：以当版本为准）。
-4. **管理台 RBAC**（权限点以中心为准）+ 版本回滚 UI 完善 + 自动回滚（发布后 nginx-probe 失败）。
-5. 遥测表 `play_event_daily` 聚合 Job 是 **M3**，别提前做。
+1. ✅ **登录接入**：中心 V14 已注册（dev 库已应用，生产待部署）；后端 JWKS 验签 + /api/me/** 硬 401；
+   前端 `session.ts`（`sysou.session` 共享 + `gamevault.session` 防污染）+ 登录弹窗；
+   生产还差：中心部署 + GameVault env（issuer/internal-token/enforce-auth=true，见 §六）。
+2. ✅ **排行榜/成就**：leaderboard + achievement 模块（01 §6 全链）；管理台 needsReview 发布闸门已落。
+3. ⏳ **游戏 A「霓虹突袭」**（Phaser 4，`docs/design/03`）——未开工；先查 Phaser 4 当前版本文档（红线：以当版本为准）。
+4. ✅ **管理台 RBAC**：PermCache 回源 + 端点硬校 + /api/me/perm（§5.3/§7 已回填实装）；
+   版本回滚 UI：Admin.vue 已有 rollback 按钮（对 rolled_back 版本再发布）；自动回滚：探针失败自动回 prev live（发布路径内）。
+5. ⛔ 遥测表 `play_event_daily` 聚合 Job 是 **M3**，别提前做。
 
 ## 三、部署与排障速查
 
@@ -63,10 +79,50 @@ ssh root@sysou.com 'tail /var/log/nginx/error.log'
 - 事实以官方/当版本为准：引擎 API 查官方文档并标来源+日期，`docs/design/00` 引擎矩阵是快照引用需复核。
 - `git push --force` 禁止；master 单分支；阶段完成即提交。
 
-## 五、未完成/遗留（M2 顺路清）
+## 五、未完成/遗留
 
-- [ ] 生产 `GAMEVAULT_JWT_ISSUER` 仍空（M1 设计如此：enforce-auth=false，管理端仅日志；M2 填）
-- [ ] 01 文档 §10 测试策略里的 ArchUnit 模块边界测试、@WebMvcTest 假 JWT 测试未落（当前 35 单测 + PlatformIT 覆盖核心链路）
+- [ ] **生产部署 M2**（§六，待 GO）：中心 V14 + 令牌 env → GameVault env → deploy.sh → smoke
+- [ ] 游戏 A「霓虹突袭」（M2 第 3 项，独立会话开工：先读 03 文档 + 复核 Phaser 4 当前版本）
+- [x] ~~01 文档 §10 ArchUnit 模块边界测试、@WebMvcTest 假 JWT 测试~~ —— M2 已用更硬的替代：
+  PlatformIT 本地 JWKS + 本地 /perms 模拟中心，签名 JWT 全链路（含 RBAC 401/403）覆盖验签/回源真实路径
 - [ ] 首页暂无「搜索/筛选」（06 游戏全量后需要）；`play_event_daily` 埋点（M3）
-- [ ] `it-rush` 是 dev 库测试数据，生产库没有；生产发布流程已验证用 reflex-rush
+- [ ] `it-rush`/`it-score` 是 dev 库测试数据（IT 造），生产库没有；dev 里榜单有残留分数（IT 每次重跑会重加）
 - [ ] vite dev 只绑 `[::1]`（Windows 行为）：访问用 `http://[::1]:5173/game/`，别用 localhost
+
+**M2 踩坑备忘（防再犯）**：
+- **PlatformIT 首次跑失败 = 旧 dev 后端的 JobConsumer 在抢同一个 Redis 消费组**（db6 共享）：跑 IT 前先杀本地 dev 后端（`taskkill //PID <dev后端>`），否则 Job 被旧进程消费/幂等键互踩。
+- IT 的 `job:done:*` 幂等键 TTL 7 天：SCORE_SETTLE 的 idem key 必须带时间戳（已改），固定 key 会被上次运行的 done 键永久跳过。
+- IT 共享 dev Redis：m2 测试开头会清 `lb:all/pending/p99:it-score` + `lb:week:it-score:*`（rank 断言确定性）。
+- `nc` 在 Windows 不存在；Redis 无 CLI 时用 python socket 打 RESP（见会话记录）。
+- 中心账号 id 是 **UUID**（sysou-manage V1）——任何 user_id 列都是 TEXT（V2 已改），别写回 BIGINT。
+- 生产启用 RBAC 前，中心必须先有 V14（AppCodes 无 gamevault 会 UNKNOWN_APP 400）+ MANAGE_INTERNAL_TOKENS 有 gamevault: 项。
+
+## 六、生产部署 M2（待 GO —— 动中心服务，需确认）
+
+影响面：sysou-manage 中心重启一次（全部 5 应用登录态短暂不可用，<1min；Flyway 只加不删，可回滚=重部署旧 jar）。
+
+```bash
+# ① 中心（sysou-manage）：部署含 V14 的新 jar + env 补内部令牌（0600）
+#    MANAGE_INTERNAL_TOKENS 追加：gamevault:<32位随机hex>（与现有 4 项同串，逗号分隔）
+#    具体命令按 sysou-manage 仓 deploy/ 脚本（与兄弟仓同型）
+# ② GameVault 生产 env（/etc/gamevault.env，0600，追加三行）：
+#    GAMEVAULT_JWT_ISSUER=https://www.sysou.com/manage
+#    GAMEVAULT_INTERNAL_TOKEN=<与①同一值>
+#    GAMEVAULT_ADMIN_ENFORCE_AUTH=true
+# ③ 部署 + 冒烟：
+#    cd GameVault && bash deploy/deploy.sh
+#    ssh root@sysou.com 'bash -s' < deploy/smoke.sh
+# ④ 验收：
+#    a. 未登录 POST /game/api/scores → 401；GET /game/api/admin/games → 401
+#    b. 中心管理台给测试账号授 gamevault_admin → 登录 /game/ → 管理台可见 + 上传/发布 200
+#    c. 普通玩家登录 → 管理台入口不可见；POST /game/api/admin/games → 403 FORBIDDEN
+#    d. 登录态提分（reflex-rush）→ 200 + rank；榜单页可见；/game/api/me/scores 有行
+```
+
+回滚预案：GameVault 侧 = `deploy.sh` 重部署旧 jar（V2 迁移不可回滚但只改列类型，旧代码不读 user_id）；
+中心侧 = sysou-manage 重部署上一版 jar（Flyway 不回滚，V14 只增行，无破坏）。
+
+## 七、M2 之后的顺序（01 文档 §11）
+
+M3：游戏 B（方块狂奔 Three.js）+ 运营统计（`play_event_daily` 聚合 Job）+ 云存档（user_save 已有表，存档 API）。
+M4：游戏 C（地牢回声 Godot 4.6 WASM）+ COOP/COEP 加固。M5（二期）：游戏 E WebSocket 对战。

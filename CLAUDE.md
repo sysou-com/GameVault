@@ -83,7 +83,7 @@ cd games/reflex-rush && npm run build   # 产物按 docs/design/02 包规范打�
 ## 四、阶段状态（随里程碑更新；细节见 `HANDOFF.md`）
 
 - [x] M1 平台核心（目录 + 播放器 + 部署）+ 游戏 D（极速反应）——**2026-10-23 部署上线**（生产 smoke 全绿、浏览器实机试玩通过）
-- [ ] M2 排行榜/成就 + 游戏 A（霓虹突袭，Phaser 4）
+- [ ] M2 排行榜/成就 + 游戏 A（霓虹突袭，Phaser 4）——**2026-10-23：排行榜/成就 + 登录门禁 + 管理台 RBAC 本地全绿**（9392c94/85f576d/733c52f，中心 V14 已推 sysou-manage、dev 库已应用；**生产部署待 GO，见 HANDOFF §六**）；**游戏 A 未开工**
 - [ ] M3 游戏 B（方块狂奔，Three.js）+ 运营统计 + 云存档（user_save + 存档 API，01 文档 §5.2）
 - [ ] M4 游戏 C（地牢回声，Godot 4.6 WASM）+ COOP/COEP 加固
 - [ ] M5（二期）游戏 E（弹珠对轰，WebSocket 对战）
