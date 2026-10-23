@@ -1,0 +1,88 @@
+{
+  "schema": "gamevault/manifest@1",
+  "game": "neon-raid",
+  "version": "1.0.0",
+  "title": "霓虹突袭",
+  "engine": "phaser-4",
+  "language": "typescript",
+  "entry": "index.html",
+  "cover": "cover.svg",
+  "size": {
+    "totalBytes": 1731390,
+    "initialLoadBytes": 1731390,
+    "maxAssetBytes": 200000000
+  },
+  "viewport": {
+    "base": [
+      960,
+      540
+    ],
+    "scale": "fit",
+    "touch": true
+  },
+  "score": {
+    "enabled": true,
+    "range": [
+      0,
+      9999999
+    ],
+    "unit": "分",
+    "higherIsBetter": true,
+    "metaSchema": {
+      "bestCombo": {
+        "type": "int",
+        "range": [
+          0,
+          9999
+        ]
+      },
+      "wavesCleared": {
+        "type": "int",
+        "range": [
+          0,
+          99
+        ]
+      },
+      "elitesKilled": {
+        "type": "int",
+        "range": [
+          0,
+          99
+        ]
+      }
+    },
+    "minPlayMs": 3000
+  },
+  "achievements": [
+    {
+      "code": "FIRST_CLEAR",
+      "title": "首次清波×5",
+      "description": "单局累计清波 5 波（= 通关一关）",
+      "rule": {
+        "type": "combo_gte",
+        "value": 5,
+        "field": "wavesCleared"
+      },
+      "icon": "a1.svg"
+    },
+    {
+      "code": "COMBO_30",
+      "title": "连锁猎手",
+      "description": "单局最高连击 30（不中弹累计击杀）",
+      "rule": {
+        "type": "combo_gte",
+        "value": 30,
+        "field": "bestCombo"
+      },
+      "icon": "a2.svg"
+    }
+  ],
+  "saves": {
+    "localStoragePrefix": "neonraid.",
+    "maxBytes": 204800
+  },
+  "audio": {
+    "requiresGesture": true
+  },
+  "notes": "Phaser 4.2.1（v4.2.1「Giedi」2026-07-09 发布，2026-10-23 核实时为最新稳定版；官方 v3→v4 迁移指南开发，只用标准游戏对象 API）+ TypeScript + Vite。零外部图片/音频资产：机影/弹/粒子全部运行时 Graphics 生成纹理，BGM/SFX 全部 WebAudio 合成（与 reflex-rush 零资产路线一致；03 文档原定 PNG 图集+ogg 已按此回写修订）。碰撞为手动 AABB（不加载任何物理插件，v4 Arcade 有 API 变更，手动判定对 v4 最稳）。波次/敌机/难度数据驱动（src/core/constants.ts），确定性随机（种子可复现，测试断言平衡）。"
+}

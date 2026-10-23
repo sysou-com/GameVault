@@ -47,7 +47,8 @@ meta 字段（`manifest.score.metaSchema`）：`{ bestCombo: int, wavesCleared: 
 
 - 风格：**霓虹夜色**——深空蓝黑底 + 高饱和品红/青色描边机影；粒子拖尾（Phaser 粒子）+ 屏幕边缘
   扫描线后处理（CSS `repeating-linear-gradient` 覆盖层即可，不走 shader，省渲染开销）。
-- 音频（WebAudio，`audio.requiresGesture=true`）：BGM 每关 1 首（~1MB ogg）；SFX：射击/爆炸/拾取/警告 6 条。
+- 音频（WebAudio，`audio.requiresGesture=true`）：**零音频资产**——BGM 每关 1 首、SFX 8 条全部运行时 WebAudio 合成
+  （`src/audio/synth.ts`，振荡器+噪声+包络，2026-10-23 开发裁定：免资产管线，与 reflex-rush 零资产路线一致）。
   首次 pointerdown/keydown 后初始化 `AudioContext`（自动播放策略）。
 
 ---
@@ -56,50 +57,55 @@ meta 字段（`manifest.score.metaSchema`）：`{ bestCombo: int, wavesCleared: 
 
 ### 2.1 选型裁定
 
-- **Phaser 4 v4.2.x**（2026-04 GA，渲染器节点式大重写；v4.0 起 API 与 v3 大体兼容，按官方迁移指南
-  开发，**只读 v4 文档**，00 文档 §3.2 脚注 5）。
-- TypeScript 5 + Vite 7 构建（单 bundle + 图集，代码分割无意义——单页游戏）。
-- 物理：**不用 Phaser 物理插件**（自动射击游戏只需矩形碰撞 + 手动速度），用 Arcade 的
-  `overlap` 判定（精确需求少，省掉 physics 步进的 CPU 开销）。
-- 存档：本游戏**无存档**（单局制），`saves.localStoragePrefix` 仅存「设置（音量/震屏开关）」。
+- **Phaser 4 v4.2.1**（2026-04 GA，渲染器节点式大重写；v4.0 起 API 与 v3 大体兼容，按官方迁移指南
+  开发，**只读 v4 文档**，00 文档 §3.2 脚注 5；2026-10-23 核实 v4.2.1「Giedi」2026-07-09 发布，为最新稳定版）。
+- TypeScript 5 + Vite 6 构建（单 bundle，代码分割无意义——单页游戏）。
+- **零外部资产**（2026-10-23 开发裁定，取代原 PNG 图集+ogg 方案）：机影/子弹/粒子全部运行时
+  `Graphics.generateTexture` 生成（`src/assets/textures.ts`）；音频全部 WebAudio 合成（`src/audio/synth.ts`）。
+  收益：包体 1.73MB（Phaser 占 ~1.7），无资产打包/版权/加载进度问题。
+- 物理：**不用任何物理插件**，手动 AABB 判定（`src/systems/collide.ts`，纯函数可单测）。原方案「Arcade
+  `overlap`」已弃：v4 对 Arcade 有 API 变更，手动判定对 v4 最稳且本游戏只有矩形碰撞。
+  子弹采用**扫掠 AABB**（同时判本帧与上一帧位置）：dt 被钳 50ms 时子弹一步 45px > 敌机宽 34px，
+  不扫掠会高速帧下穿透。
+- 存档：本游戏**无存档**（单局制），`saves.localStoragePrefix` 仅存「设置（音量/震屏开关/解锁进度/最高分）」。
 
-### 2.2 工程结构
+### 2.2 工程结构（实现版，2026-10-23）
 
 ```
 games/neon-raid/
-├── package.json            # phaser@4.2.x, typescript, vite
+├── package.json            # phaser@4.2.1, typescript, vite, @types/node（test 用）
 ├── vite.config.ts          # build.outDir=dist；产物即游戏包（zip 交管理台，02 文档 §3.3）
-├── index.html              # 包入口（<canvas id="game"> + 加载进度条）
-├── manifest.json           # 02 文档 §3.1 schema
+├── index.html              # 包入口（<canvas id="game"> + CSS 扫描线/晕影覆盖层）
+├── manifest.json           # 02 文档 §3.1 schema（build 后回填 size.totalBytes）
+├── cover.svg               # 封面（零资产：SVG 直出）
+├── scripts/                # zip.mjs / update-manifest.mjs（与 reflex-rush 同款）
+├── test/logic.test.ts      # node --test 纯逻辑单测（combo/导演/碰撞/计分/防呆）
 └── src/
-    ├── main.ts             # Phaser.Game 装配（960x540, scale: FIT, scene 注册）
+    ├── main.ts             # Phaser.Game 装配（960x540, FIT, 显式渲染器 type，window.__nv 调试钩子）
     ├── scenes/
-    │   ├── BootScene.ts    # 资源加载进度 → 转 Menu
-    │   ├── MenuScene.ts    # 标题 / 关卡选择（本局进度）/ 设置 / 平台登录引导（platform:init）
-    │   ├── PlayScene.ts    # 主游戏循环
-    │   └── ResultScene.ts  # 结算 → postMessage game:score
+    │   ├── BootScene.ts    # 纹理生成 + 桥初始化 + 音频手势监听 → Menu
+    │   ├── MenuScene.ts    # 标题 / 关卡选择（解锁进度）/ 设置 / 登录态展示
+    │   ├── PlayScene.ts    # 主循环（玩家/波次/碰撞/粒子/帧率自适应/关 2 闪电干扰）
+    │   └── ResultScene.ts  # 结算 → 同源 fetch 提分（bridge.submitScore）
     ├── core/
-    │   ├── constants.ts    # 数值表（波次/敌机/难度曲线，数据驱动，便于调平）
-    │   ├── rng.ts          # 确定性随机（种子存 localStorage，测试可复现）
-    │   └── input.ts        # 键盘+触控统一输入（虚拟摇杆组件）
+    │   ├── constants.ts    # 数值表（3 关×5 波+精英/敌机/难度/积分/拾取，数据驱动）
+    │   ├── rng.ts          # 确定性随机 mulberry32（种子存 localStorage，测试可复现）
+    │   ├── run.ts          # 单局状态（score/combo/拾取状态；addScore 封顶 9,999,999）
+    │   └── settings.ts     # localStorage 设置（音量/震屏/解锁进度/最高分）
+    ├── assets/textures.ts  # 运行时纹理（Graphics.generateTexture；零 PNG）
+    ├── audio/synth.ts      # WebAudio 合成（3 BGM + 8 SFX；手势后初始化）
     ├── entities/
-    │   ├── player.ts       # 玩家（状态机：normal/shield/invincible）
-    │   ├── enemies/        # 敌机基类 + 3 小类 + 2 精英（每精英一个 class，弹幕表数据驱动）
-    │   ├── bullets.ts      # 玩家/敌方子弹池
-    │   └── pickups.ts
+    │   ├── enemies.ts      # grunt/diver/bomber + 2 精英（弹幕表数据驱动；Unit 接口）
+    │   ├── bullets.ts      # 子弹池（玩家 64/敌方 128；px/py 上一帧位置供扫掠）
+    │   └── pickups.ts      # 拾取池（P/S/B）
     ├── systems/
-    │   ├── wave.ts         # 波次导演（读 constants 波次表：出场时刻/位置/编队）
-    │   ├── combo.ts        # 连击计时（1.5s 窗口）
-    │   ├── particles.ts    # 爆炸/拖尾粒子池
-    │   └── audio.ts        # AudioContext 生命周期 + 音量设置
-    ├── platform/
-    │   └── bridge.ts       # postMessage 契约实现（game:ready/score/error/track）+ 同源 fetch 提分
-    │                        #   （协议全文 02 文档 §4；~120 行，四款游戏共用同一份，
-    │                        #    抽成 games/shared/bridge.ts 各游戏 import）
-    └── assets/
-        ├── sprites/        # 机影 png（霓虹描边，1x/2x 两套）
-        ├── atlas.json      # 图集（TexturePacker 手拼或 free-tex-packer）
-        └── audio/          # bgm/sfx ogg
+    │   ├── waves.ts        # 波次导演状态机（spawning→gap→elite→cleared；纯逻辑）
+    │   ├── combo.ts        # 连击计时（1.5s 窗口；纯逻辑）
+    │   ├── collide.ts      # AABB/扫掠 AABB（纯函数，node 可单测）
+    │   └── pool.ts         # 通用对象池
+    └── platform/
+        ├── bridge.ts       # postMessage 契约（game:ready/score/error/track）+ 同源 fetch 提分
+        └── types.ts        # ScoreMeta 等类型
 ```
 
 ### 2.3 关键实现要点
@@ -121,13 +127,13 @@ games/neon-raid/
 
 ## 3. 性能预算
 
-| 项 | 目标 |
-|---|---|
-| 包体积 | ≤ 6MB（引擎 ~1.2MB + 图集 ≤ 2.5MB + 音频 ≤ 1.5MB + 代码 ≤ 300KB） |
-| 首玩时间 | 4G 模拟 P90 ≤ 8s（01 文档 §9） |
-| 帧率 | 桌面 60fps 稳定；移动端 30fps 可玩（降粒子后） |
-| 同屏 draw call | ≤ 30（图集单纹理） |
-| 内存 | 峰值 ≤ 200MB（DevTools，每关结束采样） |
+| 项 | 目标 | 实测（2026-10-23，v1.0.0） |
+|---|---|---|
+| 包体积 | ≤ 6MB（引擎 ~1.2MB + 图集 ≤ 2.5MB + 音频 ≤ 1.5MB + 代码 ≤ 300KB） | **1.73MB 单 bundle**（Phaser ~1.7MB；零资产后图集/音频预算取消）；zip 387KB |
+| 首玩时间 | 4G 模拟 P90 ≤ 8s（01 文档 §9） | 待生产 smoke（包小，预期轻松达标） |
+| 帧率 | 桌面 60fps 稳定；移动端 30fps 可玩（降粒子后） | 桌面浏览器 60fps（MCP 实机泡测 3 关全程无异常）；移动端 02 §8 清单 M2 内过 |
+| 同屏 draw call | ≤ 30（图集单纹理） | 每纹理独立（零图集）但同屏对象 ≤ ~40，实测无压力；后续如超标再回图集方案 |
+| 内存 | 峰值 ≤ 200MB（DevTools，每关结束采样） | 子弹/拾取对象池化；未做正式 DevTools 采样（留生产 smoke） |
 
 ---
 
@@ -149,3 +155,38 @@ games/neon-raid/
 | 移动端触控手感 | 虚拟摇杆 1D 简化；M2 前在真机（Android Chrome）过一遍 02 文档 §8 清单 |
 | 弹幕同屏密度超帧率 | 弹速/密度按 `quality` 双档（high/low 两套常量表） |
 | 音频自动播放策略 | `requiresGesture` 声明 + 首交互初始化；静音兜底（BGM 默认开，SFX 必响则用户可见提示） |
+
+---
+
+## 6. 开发回写（v1.0.0，2026-10-23）
+
+> 实现中发现与本文早期版本不一致处，均按「以官方/当版本为准」回写；踩坑均配防回归单测。
+
+**资产路线裁定**：PNG 图集 + ogg 音频 → **零资产**（运行时纹理 + WebAudio 合成）。理由：
+单页小游戏资产总量 < 100KB，图集管线（TexturePacker）收益为负；与 reflex-rush 路线一致，包体 1.73MB。
+
+**Phaser v4.2.1 踩坑（来源：`node_modules/phaser/dist/phaser.js` + `types/phaser.d.ts` + 官方 v4.0 MIGRATION-GUIDE.md，2026-10-23 核实）**：
+
+1. **渲染器选择**：`GameConfig` 无 `render.type`（`RenderConfig` 只有 antialias 等渲染参数）；
+   渲染器由**顶层 `type`** 指定（`Phaser.WEBGL` / `Phaser.CANVAS`）。传入 `canvas` 元素（或 customEnvironment）
+   时禁止 `AUTO`——`CreateRenderer` 直接抛 `Must set explicit renderType in custom environment`
+   （受控/无头浏览器实测必现）。本项目在 `main.ts` 先探测 WebGL 再传 `type`。
+2. **粒子 API**：`this.add.particles(x, y, texture, config)`（v3 是 `add.particles(texture)` 返回 emitter 对象）。
+3. **TextStyle**：无 `fontWeight` / `lineHeight` → `font: 'bold 24px Arial'` 简写 + `lineSpacing`。
+4. **Pointer**：无 `overCanvas` 属性 → 本地 `pointerover/pointerout` 标志。
+
+**本仓自产坑（已修 + 单测防回归）**：
+
+5. **精英 SpawnCmd 前缀**：导演发裸 key（`warden`）但 `makeUnit` 只认 `elite-warden` → 未捕获异常
+   冻死整个游戏循环（波 5 后卡死）。修：导演出口统一加前缀；单测断言 SpawnCmd 前缀。
+6. **子弹扫掠碰撞**：dt 钳 50ms 时子弹一步 45px > 敌机宽 34px → 高速帧抖动下穿透。修：
+   `sweptBulletHits`（本帧+上一帧双判，纯函数单测）。
+7. **场景实例复用**：Phaser 场景 `scene.start` 复用同一实例，`create()` 未清的类字段（`units` 数组）
+   跨局残留 → 防御性重置（手动重开/测试驱动场景也会踩）。
+
+**工程约定**：ESM 源码 import 一律显式 `.ts` 扩展名（node --test strip-types 需要）；
+tsc 配 `allowImportingTsExtensions + noEmit`（仅类型检查，产物走 Vite）。
+
+**验收状态**：node 单测 9/9（combo/导演/碰撞/计分/常量防呆）；浏览器实机泡测 3 关全程
+（15 波 + 4 精英 + 拾取 P/S/B + 暂停 + 结算 + 再来一局，控制台零报错）；dev 平台全链路
+（上传→校验→发布→上架→ iframe 试玩→桥握手→提分 401 优雅失败）。生产部署待 GO。

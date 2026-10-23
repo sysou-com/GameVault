@@ -1,0 +1,20 @@
+{
+  "name": "neon-raid",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/update-manifest.mjs",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "zip": "node scripts/zip.mjs"
+  },
+  "dependencies": {
+    "phaser": "^4.2.1",
+    "typescript": "~5.7.2",
+    "vite": "^6.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5"
+  }
+}
