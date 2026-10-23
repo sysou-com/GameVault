@@ -35,3 +35,10 @@ keys/
 nul
 grep.exe.stackdump
 .pi/
+
+# 凭据与临时产物（2026-10-23 误提交事故后加）
+*.jwt
+admin.jwt
+prod-*.json
+dev-upload.json
+dev-pkg.json
