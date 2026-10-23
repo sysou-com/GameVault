@@ -1,0 +1,51 @@
+# GameVault 后端 systemd（与兄弟工程同款纪律：独立 unit / 独立数据目录 / 独立端口 / 只绑回环）
+# 端口 8094（llm=8090 / easypcb=8091 / easypcb-sandbox=8092 / sysou-manage=8093，勿冲突）
+#
+# 安装（首次）：
+#   useradd -r -m -d /opt/gamevault -s /usr/sbin/nologin gamevault
+#   cp deploy/gamevault.service /etc/systemd/system/
+#   # 凭据（0600）：PG 独立库 gamevault + Redis db3（01 文档 §8）
+#   cat > /etc/gamevault.env <<'EOF'
+#   GAMEVAULT_DB_URL=jdbc:postgresql://127.0.0.1:5432/gamevault
+#   GAMEVAULT_DB_USER=gamevault
+#   GAMEVAULT_DB_PASSWORD=<生成>
+#   GAMEVAULT_REDIS_HOST=127.0.0.1
+#   GAMEVAULT_REDIS_PORT=6379
+#   GAMEVAULT_REDIS_PASSWORD=<VPS Redis 密码>
+#   GAMEVAULT_REDIS_DB=3
+#   GAMEVAULT_NGINX_PROBE_ENABLED=true
+#   GAMEVAULT_JWT_ISSUER=<M2：中心注册 gamevault 应用后填入>
+#   EOF
+#   chmod 600 /etc/gamevault.env
+#   systemctl daemon-reload && systemctl enable --now gamevault
+#
+# 上线前核对（01 文档 §8 部署事实清单）：
+#   curl -sI https://sysou.com/game/        → cache-control: no-store + COOP/COEP 两头在位
+#   curl -sI https://sysou.com/game/g/...   → 游戏包响应同样带 COOP/COEP
+#   curl -sI https://sysou.com/llm/ ...     → 兄弟前缀**不带** COOP/COEP（作用域隔离）
+
+[Unit]
+Description=GameVault backend (Spring Boot, 127.0.0.1:8094)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gamevault
+Group=gamevault
+WorkingDirectory=/opt/gamevault
+EnvironmentFile=/etc/gamevault.env
+ExecStart=/usr/bin/java -Xms256m -Xmx1g -jar /opt/gamevault/gamevault.jar
+Restart=on-failure
+RestartSec=5
+# 安全（与兄弟工程一致）
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/gamevault /tmp
+# 只允许本机回环（nginx 转发 /game/api/ → 8094）
+IPAddressDeny=any
+IPAddressAllow=127.0.0.1 ::1
+
+[Install]
+WantedBy=multi-user.target
