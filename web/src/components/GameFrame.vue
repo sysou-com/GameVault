@@ -47,13 +47,15 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import type { PlatformUser } from '../sdk/platform'
+import { api, ApiError } from '../api'
 
 /**
  * iframe 播放器（02 文档 §4.1/§4.2）：
  * - sandbox 给 allow-scripts/allow-same-origin/allow-pointer-lock/allow-autoplay/allow-popups-to-escape-sandbox，
  *   **不给 allow-top-navigation**（游戏不能劫持顶层页）。
  * - 监听 game:ready / game:error / game:score / game:track；20s 超时 UI。
- * - M1 游客态：game:score 以提示条反馈（服务端提交链 M2 开放）。
+ * - M2：game:score 走模式二代理（平台代发 POST /api/scores，带内存 token），
+ *   成功回 platform:score-result 给游戏（02 §4.2 模式二；模式一由游戏同源直连自行 fetch）。
  */
 const props = defineProps<{
   src: string
@@ -128,10 +130,8 @@ function onMessage(e: MessageEvent) {
       error.value = m.message ?? m.code ?? '未知错误'
       break
     case 'game:score': {
-      // M1：无登录/无 /api/scores（M2 开放），先给本地反馈；M2 起走同源直连或 postMessage 代理
-      const s = Number(m.score)
-      scoreToast.value = `本局 ${s} 分（提交排行榜 M2 开放，本机已记）`
-      window.setTimeout(() => { scoreToast.value = '' }, 6000)
+      // M2：模式二代理——平台代发提分（游戏侧模式一同源直连优先，这里是回落路径）
+      void submitScore(m)
       break
     }
     case 'game:track':
@@ -144,6 +144,46 @@ function onMessage(e: MessageEvent) {
 function retry() { startLoading() }
 function restart() { post('platform:restart') }
 function clearSave() { post('platform:clearSave') }
+
+/**
+ * 模式二提分（02 文档 §4.2）：平台拿内存 token 代发 POST /api/scores，
+ * 结果回 platform:score-result（游戏据此展示排名/解锁；同源模式游戏自己 fetch，不走这里）。
+ */
+async function submitScore(m: Record<string, any>) {
+  const score = Number(m.score)
+  if (!Number.isFinite(score)) {
+    toast('分数格式不正确')
+    return
+  }
+  try {
+    const r = await api.submitScore({
+      gameSlug: props.slug,
+      score,
+      meta: (m.meta ?? {}) as Record<string, unknown>,
+      clientTs: Number(m.clientTs) || Date.now(),
+      idempotencyKey: typeof m.idempotencyKey === 'string' ? m.idempotencyKey : crypto.randomUUID(),
+      playSessionId: props.playSessionId || undefined,
+    })
+    if (r.status === 'flagged') {
+      toast(`${score} 分已提交，异常待复核（暂不上榜）`)
+    } else {
+      toast(r.rank != null ? `本局 ${score} 分 · 全服第 ${r.rank} 名` : `本局 ${score} 分已提交`)
+    }
+    if (r.unlocked && r.unlocked.length) {
+      window.setTimeout(() => toast(`🏆 解锁成就 ${r.unlocked!.length} 个`), 600)
+    }
+    post('platform:score-result', { ok: true, status: r.status, rank: r.rank, unlocked: r.unlocked, note: r.note })
+  } catch (e) {
+    const msg = e instanceof ApiError ? `${e.code}: ${e.message}` : '提交失败'
+    toast(`本局 ${score} 分（提交失败：${msg}）`)
+    post('platform:score-result', { ok: false, error: msg })
+  }
+}
+
+function toast(msg: string) {
+  scoreToast.value = msg
+  window.setTimeout(() => { scoreToast.value = '' }, 6000)
+}
 
 onMounted(() => {
   window.addEventListener('message', onMessage)

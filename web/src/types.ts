@@ -18,6 +18,8 @@ export interface GameCard {
   coverUrl: string
   tags: string[] | null
   liveVersion: LiveVersion | null
+  /** M2：Top3 分数（api 模块组合；空榜 = []） */
+  topScores?: BoardEntry[]
 }
 
 export interface Build {
@@ -49,6 +51,70 @@ export interface GameDetail {
 export interface Health {
   service: string
   ok: boolean
+}
+
+/** M2 登录态（GET /api/me；后端验签后返回）。 */
+export interface Me {
+  id: string
+  email: string | null
+  roles: string[]
+  platformAdmin: boolean
+}
+
+/** 榜单条目（01 文档 §5.1）。 */
+export interface BoardEntry {
+  rank: number
+  userId: string
+  userName: string
+  score: number
+  meta: Record<string, unknown> | null
+  updatedAt: string | null
+}
+
+export interface BoardView {
+  entries: BoardEntry[]
+  myRank: number | null
+  myScore: number | null
+}
+
+/** 我的分数历史（GET /api/me/scores）。 */
+export interface ScoreRow {
+  id: number
+  score: number
+  meta: Record<string, unknown> | null
+  clientTs: string
+  submittedAt: string
+  status: string
+  rejectReason: string | null
+}
+
+/** 我的成就（GET /api/me/achievements）。 */
+export interface GrantView {
+  code: string
+  title: string
+  description: string
+  iconUrl: string | null
+  grantedAt: string
+}
+
+/** 提分响应（POST /api/scores；status: ok | flagged）。 */
+export interface ScoreSubmitResponse {
+  status: string
+  rank: number | null
+  score: number | null
+  unlocked: string[]
+  note: string | null
+}
+
+/** flagged 复核（管理台，01 §6.1.5）。 */
+export interface FlaggedRow {
+  id: number
+  userId: string
+  userName: string
+  score: number
+  meta: Record<string, unknown> | null
+  submittedAt: string
+  rejectReason: string | null
 }
 
 export interface AdminPackageStatus {

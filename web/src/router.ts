@@ -6,6 +6,7 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: () => import('./views/Home.vue') },
     { path: '/g/:slug', name: 'game', component: () => import('./views/GameDetail.vue'), props: true },
+    { path: '/g/:slug/board', name: 'board', component: () => import('./views/Leaderboard.vue'), props: true },
     { path: '/admin', name: 'admin', component: () => import('./views/Admin.vue') },
   ],
 })

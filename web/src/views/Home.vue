@@ -20,6 +20,13 @@
             <span v-for="t in (g.tags ?? [])" :key="t" class="tag">{{ t }}</span>
             <span v-if="g.liveVersion" class="tag ver">v{{ g.liveVersion.version }}</span>
           </div>
+          <div v-if="(g.topScores ?? []).length" class="tops">
+            <div v-for="t in g.topScores!.slice(0, 3)" :key="t.rank" class="top-row">
+              <span class="top-rank">{{ t.rank }}</span>
+              <span class="top-name">{{ t.userName }}</span>
+              <span class="top-score">{{ t.score }}</span>
+            </div>
+          </div>
         </div>
       </router-link>
     </div>
@@ -72,4 +79,9 @@ onMounted(async () => {
 .card-body p { margin: 0 0 10px; font-size: 13px; }
 .tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag.ver { color: var(--neon); }
+.tops { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
+.top-row { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
+.top-rank { color: var(--text-dim); width: 14px; }
+.top-name { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.top-score { color: var(--neon); font-variant-numeric: tabular-nums; }
 </style>

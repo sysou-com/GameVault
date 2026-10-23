@@ -1,11 +1,13 @@
 import type {
-  AdminPackageStatus, GameAdminRow, GameCard, GameDetail,
-  Health, PlaySession, UploadResult,
+  AdminPackageStatus, BoardView, FlaggedRow, GameAdminRow, GameCard, GameDetail,
+  GrantView, Health, Me, PlaySession, ScoreRow, ScoreSubmitResponse, UploadResult,
 } from './types'
+import { currentToken } from './session'
 
 /**
  * API 封装：一律同源相对路径（vite base=/game/ ⇒ /game/api/...），不写死域名（红线）。
  * 生产由 nginx 剥 /game 前缀到 8094；dev 由 vite proxy 等价转发。
+ * M2：已登录时自动附 Authorization（中心 JWT；01 文档 §5.2）。
  */
 const API = import.meta.env.BASE_URL + 'api' // → "/game/api"
 
@@ -20,8 +22,12 @@ export class ApiError extends Error {
 }
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = currentToken()
   const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...init,
   })
   const text = await res.text()
@@ -41,6 +47,25 @@ export const api = {
   health: () => http<Health>('/health'),
   games: () => http<GameCard[]>('/games'),
   game: (slug: string) => http<GameDetail>(`/games/${encodeURIComponent(slug)}`),
+
+  // M2 榜单（§5.1；登录请求附 myRank）
+  leaderboard: (slug: string, scope: 'all' | 'week') =>
+    http<BoardView>(`/games/${encodeURIComponent(slug)}/leaderboard?scope=${scope}`),
+
+  // M2 登录态（§5.2；AuthFilter 对 /api/scores 与 /api/me/** 硬 401）
+  me: () => http<Me>('/me'),
+  submitScore: (body: {
+    gameSlug: string
+    score: number
+    meta?: Record<string, unknown>
+    clientTs?: number
+    idempotencyKey?: string
+    playSessionId?: string
+  }) => http<ScoreSubmitResponse>('/scores', { method: 'POST', body: JSON.stringify(body) }),
+  myScores: (gameSlug: string) =>
+    http<ScoreRow[]>(`/me/scores?gameSlug=${encodeURIComponent(gameSlug)}`),
+  myAchievements: (gameSlug: string) =>
+    http<GrantView[]>(`/me/achievements?gameSlug=${encodeURIComponent(gameSlug)}`),
 
   // 试玩会话（M1 最小）
   playStart: (gameSlug: string) =>
@@ -72,4 +97,12 @@ export const api = {
   adminGames: () => http<{ games: GameAdminRow[] }>('/admin/games').then(r => r.games),
   adminEnable: (slug: string) => http<{ ok: string; slug: string }>(`/admin/games/${encodeURIComponent(slug)}/enable`, { method: 'POST' }),
   adminDisable: (slug: string) => http<{ ok: string; slug: string }>(`/admin/games/${encodeURIComponent(slug)}/disable`, { method: 'POST' }),
+
+  // M2 管理：needsReview 闸门 + flagged 复核（02 §6 / 01 §6.1.5）
+  adminConfirmReview: (versionId: number) =>
+    http<{ ok: string; versionId: string }>(`/admin/versions/${versionId}/confirm-review`, { method: 'POST' }),
+  adminFlaggedScores: (slug: string) =>
+    http<{ scores: FlaggedRow[] }>(`/admin/scores/flagged?slug=${encodeURIComponent(slug)}`),
+  adminApproveScore: (id: number) => http<{ ok: string }>(`/admin/scores/${id}/approve`, { method: 'POST' }),
+  adminRejectScore: (id: number) => http<{ ok: string }>(`/admin/scores/${id}/reject`, { method: 'POST' }),
 }

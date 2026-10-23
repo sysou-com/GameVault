@@ -1,5 +1,8 @@
 package com.sysou.gamevault;
 
+import com.sun.net.httpserver.HttpServer;
+import io.jsonwebtoken.Jwts;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,11 +13,26 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.sysou.gamevault.common.job.JobKinds;
+import com.sysou.gamevault.common.job.JobProducer;
+
+import java.math.BigInteger;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyFactory;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.interfaces.ECPrivateKey;
+import java.security.interfaces.ECPublicKey;
+import java.security.spec.ECGenParameterSpec;
+import java.util.Base64;
+import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -39,6 +57,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @EnabledIfSystemProperty(named = "gamevault.it.enabled", matches = "true")
 class PlatformIT {
+
+    // ---- M2：本地 JWKS + 本地签名中心 JWT（不依赖远端中心；验证 JwtVerifier 真实验签路径）----
+    static final String TEST_ISSUER = "https://www.sysou.com/manage";
+    static final String TEST_KID = "gamevault-it";
+    static KeyPair testKeyPair;
+    static HttpServer jwksServer;
+    static int jwksPort;
+
+    @AfterAll
+    static void stopJwks() {
+        if (jwksServer != null) jwksServer.stop(0);
+    }
 
     /** 开发库凭据只存在 .env.dev（0600，gitignored），不入库不打印（兄弟工程同款纪律）。 */
     @DynamicPropertySource
@@ -66,10 +96,71 @@ class PlatformIT {
         r.add("gamevault.staging-dir", () -> "target/it/staging");
         r.add("gamevault.nginx-probe.enabled", () -> "false");
         r.add("gamevault.admin.enforce-auth", () -> "false");
+        try {
+            startLocalJwks();
+        } catch (Exception e) {
+            throw new IllegalStateException("本地 JWKS 启动失败", e);
+        }
+        r.add("gamevault.jwt.jwks-url", () -> "http://127.0.0.1:" + jwksPort + "/jwks");
+        r.add("gamevault.jwt.issuer", () -> TEST_ISSUER);
+    }
+
+    /** 本地 JWKS 服务（随机端口）+ EC P-256 密钥对：中心同构（ES256，JWKS x/y 为 32 字节 base64url）。 */
+    static void startLocalJwks() throws Exception {
+        KeyPairGenerator gen = KeyPairGenerator.getInstance("EC");
+        gen.initialize(new ECGenParameterSpec("secp256r1"));
+        testKeyPair = gen.generateKeyPair();
+        ECPublicKey pub = (ECPublicKey) testKeyPair.getPublic();
+        String x = b64url(pad(pub.getW().getAffineX(), 32));
+        String y = b64url(pad(pub.getW().getAffineY(), 32));
+        String jwks = "{\"keys\":[{\"kty\":\"EC\",\"crv\":\"P-256\",\"use\":\"sig\",\"alg\":\"ES256\","
+                + "\"kid\":\"" + TEST_KID + "\",\"x\":\"" + x + "\",\"y\":\"" + y + "\"}]}";
+        jwksServer = HttpServer.create(new InetSocketAddress(0), 0);
+        jwksPort = jwksServer.getAddress().getPort();
+        jwksServer.createContext("/jwks", ex -> {
+            byte[] body = jwks.getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, body.length);
+            ex.getResponseBody().write(body);
+            ex.close();
+        });
+        jwksServer.start();
+    }
+
+    static String signTestJwt(String sub, String email) {
+        return Jwts.builder()
+                .header().keyId(TEST_KID).and()
+                .issuer(TEST_ISSUER)
+                .subject(sub)
+                .claim("email", email)
+                .claim("roles", List.of("gamevault_user"))
+                .claim("pv", 1L)
+                .claim("pa", false)
+                .expiration(new Date(System.currentTimeMillis() + 30 * 60_000))
+                .signWith((ECPrivateKey) testKeyPair.getPrivate(), Jwts.SIG.ES256)
+                .compact();
+    }
+
+    static String b64url(byte[] b) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+    }
+
+    static byte[] pad(BigInteger v, int len) {
+        byte[] raw = v.toByteArray();
+        byte[] out = new byte[len];
+        if (raw.length > len) {
+            System.arraycopy(raw, raw.length - len, out, 0, len);
+        } else {
+            System.arraycopy(raw, 0, out, len - raw.length, raw.length);
+        }
+        return out;
     }
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    JobProducer jobProducer;
 
     @Test
     void fullUploadPublishPlayPipeline() throws Exception {
@@ -150,12 +241,117 @@ class PlatformIT {
                 .andExpect(jsonPath("$[?(@.slug=='it-rush')].topScores").isArray());
     }
 
+    /**
+     * M2 分数全链路（本地 JWKS 签名中心 JWT）：
+     * 上传带成就的游戏 → 发布/上架 → 签名 JWT 提分（ok+rank+解锁）→ 幂等重放 →
+     * 榜单可见（myRank）→ SCORE_SETTLE Job 落 user_score → 我的分数/成就 → 越界拒绝 400。
+     */
+    @Test
+    void m2ScoreChainWithSignedJwt() throws Exception {
+        // ① 自包含游戏：it-score 1.0.0（score 0–999999 + 成就 FIRST_100 = score_gte 100）
+        String uploadBody = mvc.perform(multipart("/api/admin/packages").file(new MockMultipartFile(
+                        "file", "it-score.zip", "application/zip", buildZip("it-score", "1.0.0", m2Manifest()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.slug").value("it-score"))
+                .andReturn().getResponse().getContentAsString();
+        String packageId = extractJsonField(uploadBody, "packageId");
+        long versionId = Long.parseLong(extractJsonField(uploadBody, "versionId"));
+        String versionStatus = null;
+        for (int i = 0; i < 60; i++) {
+            String st = mvc.perform(get("/api/admin/packages/" + packageId)).andReturn().getResponse().getContentAsString();
+            versionStatus = extractJsonField(st, "versionStatus");
+            if ("ready".equals(versionStatus) || "failed".equals(versionStatus)) break;
+            Thread.sleep(500);
+        }
+        assertEquals("ready", versionStatus, "it-score Job 处理失败");
+        mvc.perform(post("/api/admin/versions/" + versionId + "/publish")).andExpect(status().isOk());
+        mvc.perform(post("/api/admin/games/it-score/enable")).andExpect(status().isOk());
+
+        // ② 签名中心 JWT（本地 JWKS 验签路径）
+        String sub = UUID.randomUUID().toString();
+        String jwt = signTestJwt(sub, "it-player@example.com");
+        String auth = "Bearer " + jwt;
+
+        // ③ 提分：ok + rank=1 + 成就解锁 FIRST_100
+        mvc.perform(post("/api/scores").header("Authorization", auth)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"gameSlug\":\"it-score\",\"score\":150,\"meta\":{\"bestCombo\":7},"
+                                + "\"clientTs\":" + System.currentTimeMillis() + ",\"idempotencyKey\":\"it-k-1\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ok"))
+                .andExpect(jsonPath("$.rank").value(1))
+                .andExpect(jsonPath("$.unlocked[0]").value("FIRST_100"));
+
+        // ④ 幂等重放（同 key → 200 同结果，不重发成就）
+        mvc.perform(post("/api/scores").header("Authorization", auth)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"gameSlug\":\"it-score\",\"score\":150,\"clientTs\":" + System.currentTimeMillis()
+                                + ",\"idempotencyKey\":\"it-k-1\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rank").value(1))
+                .andExpect(jsonPath("$.unlocked").isArray());
+
+        // ⑤ 榜单可见（含 myRank；展示名 = JWT email）
+        mvc.perform(get("/api/games/it-score/leaderboard?scope=all").header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entries[0].userName").value("it-player@example.com"))
+                .andExpect(jsonPath("$.entries[0].score").value(150))
+                .andExpect(jsonPath("$.myRank").value(1));
+
+        // ⑥ settle 前 user_score 未落库 → 触发 SCORE_SETTLE Job → 轮询落库
+        mvc.perform(get("/api/me/scores?gameSlug=it-score").header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").doesNotExist());
+        jobProducer.publish(JobKinds.SCORE_SETTLE, "it-settle-1", Map.of());
+        boolean settled = false;
+        for (int i = 0; i < 30; i++) {
+            String s = mvc.perform(get("/api/me/scores?gameSlug=it-score").header("Authorization", auth))
+                    .andReturn().getResponse().getContentAsString();
+            if (s.contains("\"score\":150")) { settled = true; break; }
+            Thread.sleep(500);
+        }
+        assertTrue(settled, "SCORE_SETTLE 未在 15s 内落 user_score");
+
+        // ⑦ 我的成就（发放时已写 achievement_grant）
+        mvc.perform(get("/api/me/achievements?gameSlug=it-score").header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].code").value("FIRST_100"));
+
+        // ⑧ 越界拒绝（> max 999999 → 400 + 审计行 rejected_bounds）
+        mvc.perform(post("/api/scores").header("Authorization", auth)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"gameSlug\":\"it-score\",\"score\":1000000,\"clientTs\":" + System.currentTimeMillis()
+                                + ",\"idempotencyKey\":\"it-k-2\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("SCORE_OUT_OF_RANGE"));
+    }
+
+    /** M2 测试用 manifest（分数区间 + metaSchema + 成就定义；02 文档 §3.1）。 */
+    private static String m2Manifest() {
+        return "{\"schema\":\"gamevault/manifest@1\",\"game\":\"it-score\",\"version\":\"1.0.0\",\"title\":\"M2 分数链路\","
+                + "\"engine\":\"canvas-native\",\"language\":\"typescript\",\"entry\":\"index.html\",\"cover\":\"cover.png\","
+                + "\"size\":{\"totalBytes\":999,\"initialLoadBytes\":100},"
+                + "\"score\":{\"enabled\":true,\"range\":[0,999999],\"minPlayMs\":1000,"
+                + "\"metaSchema\":{\"bestCombo\":{\"type\":\"int\",\"range\":[0,9999]}}},"
+                + "\"achievements\":[{\"code\":\"FIRST_100\",\"title\":\"破百\",\"description\":\"单局 100 分\","
+                + "\"rule\":{\"type\":\"score_gte\",\"value\":100}}]}";
+    }
+
     private static byte[] buildZip(String slug, String version) throws Exception {
         String manifest = String.format(
                 "{\"schema\":\"gamevault/manifest@1\",\"game\":\"%s\",\"version\":\"%s\",\"title\":\"集成测试\","
                         + "\"engine\":\"canvas-native\",\"language\":\"typescript\",\"entry\":\"index.html\",\"cover\":\"cover.png\","
                         + "\"size\":{\"totalBytes\":999,\"initialLoadBytes\":100},\"score\":{\"enabled\":true,\"range\":[0,9999]}}",
                 slug, version);
+        return buildZipFor(manifest);
+    }
+
+    /** 带自定义 manifest 的造包（M2 分数链路测试用）。 */
+    private static byte[] buildZip(String slug, String version, String manifest) throws Exception {
+        return buildZipFor(manifest);
+    }
+
+    private static byte[] buildZipFor(String manifest) throws Exception {
         java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
         try (var zos = new ZipOutputStream(bos)) {
             zos.putNextEntry(new ZipEntry("manifest.json"));

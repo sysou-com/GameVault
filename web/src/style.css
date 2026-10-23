@@ -62,6 +62,8 @@ a:hover { text-decoration: underline; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.primary { background: linear-gradient(135deg, rgba(34,211,238,.18), rgba(167,139,250,.18)); border-color: var(--neon); }
 .btn.danger { border-color: rgba(248,113,113,.5); color: var(--err); }
+.btn.small { padding: 4px 10px; font-size: 12px; }
+.btn.ghost { background: transparent; }
 .panel { background: var(--bg-panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .muted { color: var(--text-dim); }
 .err { color: var(--err); }
@@ -71,3 +73,4 @@ a:hover { text-decoration: underline; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
 th { color: var(--text-dim); font-weight: 500; font-size: 12px; }
+.small { font-size: 12px; }
