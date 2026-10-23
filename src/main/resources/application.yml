@@ -32,7 +32,7 @@ spring:
       host: ${GAMEVAULT_REDIS_HOST:127.0.0.1}
       port: ${GAMEVAULT_REDIS_PORT:6379}
       password: ${GAMEVAULT_REDIS_PASSWORD:}
-      database: ${GAMEVAULT_REDIS_DB:3}   # 生产 db3（Weaveora db0/1、EasyPCB db2、sysou-manage db2/3-dev 已占用核对见 01 文档 §8）
+      database: ${GAMEVAULT_REDIS_DB:4}   # 生产 db4（占用核对 2026-10-23：Weaveora db0/1、EasyPCB db2、sysou-manage prod db2 / dev db3、PlatformIT db6；db3 原计划已让给 manage dev，见 01 文档 §8）
 
 gamevault:
   # 游戏包目录（01 文档 §8 部署事实：生产 /var/www/gamevault/*）

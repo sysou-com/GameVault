@@ -100,7 +100,7 @@ public class AdminService {
         String cover = manifest.path("cover").asText("cover.png");
 
         catalogApi.registerUpload(slug, title, engine, language,
-                "/game/g/" + slug + "/" + cover, manifest.toString(), version,
+                "/game/g/" + slug + "/" + version + "/" + cover, manifest.toString(), version,
                 "/game/g/" + slug + "/" + version + "/" + entry, sha, bytes.length);
 
         Game g = games.findBySlug(slug).orElseThrow();

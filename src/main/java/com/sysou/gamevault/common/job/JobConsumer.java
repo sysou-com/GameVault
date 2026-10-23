@@ -105,7 +105,10 @@ public class JobConsumer {
     private void ensureGroup() {
         if (groupReady.get()) return;
         try {
-            redis.opsForStream().createGroup(JobKinds.STREAM_JOBS, ReadOffset.latest(), JobKinds.GROUP);
+            // 初始建组从流头（0-0）而非 latest()：若 job 先 XADD、组后建（首次发布时的竞态），
+            // latest() 会让已入队消息对 ">" 永远不可见（Job 永久 UNKNOWN）；0-0 + job 幂等键（job:done）
+            // 保证重复投递安全（2026-10-23 生产首发实测暴露）。
+            redis.opsForStream().createGroup(JobKinds.STREAM_JOBS, ReadOffset.from("0-0"), JobKinds.GROUP);
             groupReady.set(true);
             log.info("Job 消费组已就绪 group={} consumer={}", JobKinds.GROUP, consumerName);
         } catch (Exception e) {

@@ -4,7 +4,8 @@
 # 安装（首次）：
 #   useradd -r -m -d /opt/gamevault -s /usr/sbin/nologin gamevault
 #   cp deploy/gamevault.service /etc/systemd/system/
-#   # 凭据（0600）：PG 独立库 gamevault + Redis db3（01 文档 §8）
+#   # 凭据（0600）：PG 独立库 gamevault + Redis db4（01 文档 §8；db3 已让给 sysou-manage dev，2026-10-23 部署核对）
+#   # JDK：与兄弟服务同款 /opt/java21/current（VPS /usr/bin/java 是 17，不可用——class 61 跑不了 class 65）
 #   cat > /etc/gamevault.env <<'EOF'
 #   GAMEVAULT_DB_URL=jdbc:postgresql://127.0.0.1:5432/gamevault
 #   GAMEVAULT_DB_USER=gamevault
@@ -35,7 +36,7 @@ User=gamevault
 Group=gamevault
 WorkingDirectory=/opt/gamevault
 EnvironmentFile=/etc/gamevault.env
-ExecStart=/usr/bin/java -Xms256m -Xmx1g -jar /opt/gamevault/gamevault.jar
+ExecStart=/opt/java21/current/bin/java -Xms256m -Xmx1g -jar /opt/gamevault/gamevault.jar
 Restart=on-failure
 RestartSec=5
 # 安全（与兄弟工程一致）

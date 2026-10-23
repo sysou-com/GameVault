@@ -10,6 +10,9 @@ cd "$(dirname "$0")/.."
 
 HOST=root@sysou.com
 
+echo "==> VPS 一次性 bootstrap 检查（首次：ssh root@sysou.com 'bash -s' < deploy/bootstrap.sh）"
+ssh "$HOST" "test -s /etc/gamevault.env" || { echo "缺 /etc/gamevault.env：先跑 bootstrap.sh"; exit 1; }
+
 echo "==> 构建 jar（含 web/dist → BOOT-INF/static 回退）"
 mvn -B -DskipTests clean package
 [ -f web/dist/index.html ] || { echo "web/dist 缺失：先 npm install && npm run build"; exit 1; }
@@ -23,8 +26,16 @@ ssh "$HOST" "mkdir -p /var/www/gamevault/static /var/www/gamevault/games && chow
 # tar 流式同步（VPS 无 rsync 依赖）
 tar -C web/dist -cf - . | ssh "$HOST" "tar -xf - -C /var/www/gamevault/static/"
 
+echo "==> systemd unit（幂等覆盖）"
+scp -q deploy/gamevault.service "$HOST:/etc/systemd/system/gamevault.service"
+
+echo "==> nginx 片段（幂等插入 sysou.com server 块）+ 校验 + reload"
+scp -q deploy/nginx-gamevault.conf "$HOST:/tmp/gamevault-nginx.conf"
+scp -q deploy/install-nginx.py "$HOST:/tmp/install-nginx.py"
+ssh "$HOST" "python3 /tmp/install-nginx.py /tmp/gamevault-nginx.conf && nginx -t && systemctl reload nginx && rm -f /tmp/gamevault-nginx.conf /tmp/install-nginx.py"
+
 echo "==> 重启服务"
-ssh "$HOST" "systemctl daemon-reload; systemctl restart gamevault; sleep 5; systemctl is-active gamevault"
+ssh "$HOST" "systemctl daemon-reload; systemctl restart gamevault; sleep 8; systemctl is-active gamevault"
 
 echo "==> 冒烟"
 ssh "$HOST" "bash -s" < deploy/smoke.sh

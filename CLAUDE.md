@@ -23,7 +23,7 @@
 
 | 任务类型 | 必读 |
 |---|---|
-| 任何新会话开场 | 本文件 §二（红线）+ `docs/design/00` §架构总览 |
+| 任何新会话开场 | 本文件 §二（红线）+ `docs/design/00` §架构总览 + **`HANDOFF.md`（当前状态/开工清单/遗留）** |
 | 平台后端（API/模块/表） | `docs/design/01`（模块规格 §五、数据模型 §六、API 契约 §七） |
 | 平台前端（Vue 页面） | `docs/design/01` §四（前端架构）+ 兄弟工程 `../sysou-manage` 前端接入章节 |
 | 游戏接入 / 发布 / 运行时 | `docs/design/02`（manifest / postMessage 协议 / COOP·COEP / 发布管线） |
@@ -80,9 +80,9 @@ npm run build        # vite build --base=/game/
 cd games/reflex-rush && npm run build   # 产物按 docs/design/02 包规范打成 zip 交管理台发布
 ```
 
-## 四、阶段状态（随里程碑更新）
+## 四、阶段状态（随里程碑更新；细节见 `HANDOFF.md`）
 
-- [ ] M1 平台核心（目录 + 播放器 + 部署）+ 游戏 D（极速反应）
+- [x] M1 平台核心（目录 + 播放器 + 部署）+ 游戏 D（极速反应）——**2026-10-23 部署上线**（生产 smoke 全绿、浏览器实机试玩通过）
 - [ ] M2 排行榜/成就 + 游戏 A（霓虹突袭，Phaser 4）
 - [ ] M3 游戏 B（方块狂奔，Three.js）+ 运营统计 + 云存档（user_save + 存档 API，01 文档 §5.2）
 - [ ] M4 游戏 C（地牢回声，Godot 4.6 WASM）+ COOP/COEP 加固
