@@ -1,9 +1,9 @@
-# HANDOFF — 会话交接（2026-10-23，M1 已上线；M2 后端/前端/RBAC 本地全绿，待生产部署 + 游戏 A）
+# HANDOFF — 会话交接（2026-10-23，M1 + M2 均已上线；剩游戏 A）
 
 > 新会话开场协议：先 `git fetch origin && git status -sb` 同步 → 读 `CLAUDE.md`（红线+入口）→
 > 读本文件（当前状态）→ 按任务读 `docs/design/` 对应章节。**冲突优先级：用户裁定 > docs/design > 本文件 > 代码现状。**
 
-## 一、当前状态（M1 ✅ 上线；M2 本地完成，待生产部署）
+## 一、当前状态（M1 ✅ 上线；M2 ✅ 2026-10-23 生产上线，签名 JWT + 中心 RBAC 全链路验收通过）
 
 **生产已跑通**（https://sysou.com/game/ → 308 → www.sysou.com/game/，M1 状态）：
 - 后端 `gamevault.service`（systemd，`/opt/java21/current` JVM，127.0.0.1:8094，PG 生产库 `gamevault`，Redis db4）
@@ -26,7 +26,7 @@
   验签→提分→榜→settle→成就→RBAC 401/403/200；`-Dgamevault.it.enabled=true -Dtest=PlatformIT`）
 
 **生产启用顺序（待 GO，见 §六）**：中心部署（V14 + MANAGE_INTERNAL_TOKENS 补 gamevault: 项）
-→ GameVault env 填 `GAMEVAULT_JWT_ISSUER=https://www.sysou.com/manage` / `GAMEVAULT_INTERNAL_TOKEN=同值` / `GAMEVAULT_ADMIN_ENFORCE_AUTH=true` → `deploy/deploy.sh` → smoke。
+→ GameVault env 填 `GAMEVAULT_JWT_ISSUER=https://www.sysou.com/manage/api`（含 /api！）/ `GAMEVAULT_INTERNAL_TOKEN=同值` / `GAMEVAULT_ADMIN_ENFORCE_AUTH=true` → `deploy/deploy.sh` → smoke。
 
 **dev 环境（本地 Windows）**：
 - 隧道：PG 54329→VPS:5432、Redis 6380→VPS:6379（`plink`/`ssh` 自建，断了要重拉）
@@ -46,7 +46,7 @@
 
 1. ✅ **登录接入**：中心 V14 已注册（dev 库已应用，生产待部署）；后端 JWKS 验签 + /api/me/** 硬 401；
    前端 `session.ts`（`sysou.session` 共享 + `gamevault.session` 防污染）+ 登录弹窗；
-   生产还差：中心部署 + GameVault env（issuer/internal-token/enforce-auth=true，见 §六）。
+   **生产已启用**：中心 V14 已应用（Flyway max=14）、`gamevault:` 内部令牌已配、GameVault env 三行已配（enforce-auth=true）。
 2. ✅ **排行榜/成就**：leaderboard + achievement 模块（01 §6 全链）；管理台 needsReview 发布闸门已落。
 3. ⏳ **游戏 A「霓虹突袭」**（Phaser 4，`docs/design/03`）——未开工；先查 Phaser 4 当前版本文档（红线：以当版本为准）。
 4. ✅ **管理台 RBAC**：PermCache 回源 + 端点硬校 + /api/me/perm（§5.3/§7 已回填实装）；
@@ -81,7 +81,7 @@ ssh root@sysou.com 'tail /var/log/nginx/error.log'
 
 ## 五、未完成/遗留
 
-- [ ] **生产部署 M2**（§六，待 GO）：中心 V14 + 令牌 env → GameVault env → deploy.sh → smoke
+- [x] ~~**生产部署 M2**~~ **✅ 2026-10-23 完成**（中心 V14 + 令牌 env → GameVault env → deploy.sh → SMOKE PASS → 签名 JWT 验收全绿，见 §六）
 - [ ] 游戏 A「霓虹突袭」（M2 第 3 项，独立会话开工：先读 03 文档 + 复核 Phaser 4 当前版本）
 - [x] ~~01 文档 §10 ArchUnit 模块边界测试、@WebMvcTest 假 JWT 测试~~ —— M2 已用更硬的替代：
   PlatformIT 本地 JWKS + 本地 /perms 模拟中心，签名 JWT 全链路（含 RBAC 401/403）覆盖验签/回源真实路径
@@ -96,30 +96,27 @@ ssh root@sysou.com 'tail /var/log/nginx/error.log'
 - `nc` 在 Windows 不存在；Redis 无 CLI 时用 python socket 打 RESP（见会话记录）。
 - 中心账号 id 是 **UUID**（sysou-manage V1）——任何 user_id 列都是 TEXT（V2 已改），别写回 BIGINT。
 - 生产启用 RBAC 前，中心必须先有 V14（AppCodes 无 gamevault 会 UNKNOWN_APP 400）+ MANAGE_INTERNAL_TOKENS 有 gamevault: 项。
+- **issuer 陷阱（2026-10-23 生产实踩）**：GameVault 验签的 `GAMEVAULT_JWT_ISSUER` 必须与中心签 JWT 的 `MANAGE_JWT_ISSUER` **逐字符一致**——中心实际值是 `https://www.sysou.com/manage/api`（**含 /api**，见中心 env），只配 `/manage` 会导致全体用户 401。以中心 env 文件为准抄，别按文档猜。
 
-## 六、生产部署 M2（待 GO —— 动中心服务，需确认）
+## 六、生产部署 M2（✅ 2026-10-23 完成；留档备查）
 
 影响面：sysou-manage 中心重启一次（全部 5 应用登录态短暂不可用，<1min；Flyway 只加不删，可回滚=重部署旧 jar）。
 
-```bash
-# ① 中心（sysou-manage）：部署含 V14 的新 jar + env 补内部令牌（0600）
-#    MANAGE_INTERNAL_TOKENS 追加：gamevault:<32位随机hex>（与现有 4 项同串，逗号分隔）
-#    具体命令按 sysou-manage 仓 deploy/ 脚本（与兄弟仓同型）
-# ② GameVault 生产 env（/etc/gamevault.env，0600，追加三行）：
-#    GAMEVAULT_JWT_ISSUER=https://www.sysou.com/manage
-#    GAMEVAULT_INTERNAL_TOKEN=<与①同一值>
-#    GAMEVAULT_ADMIN_ENFORCE_AUTH=true
-# ③ 部署 + 冒烟：
-#    cd GameVault && bash deploy/deploy.sh
-#    ssh root@sysou.com 'bash -s' < deploy/smoke.sh
-# ④ 验收：
-#    a. 未登录 POST /game/api/scores → 401；GET /game/api/admin/games → 401
-#    b. 中心管理台给测试账号授 gamevault_admin → 登录 /game/ → 管理台可见 + 上传/发布 200
-#    c. 普通玩家登录 → 管理台入口不可见；POST /game/api/admin/games → 403 FORBIDDEN
-#    d. 登录态提分（reflex-rush）→ 200 + rank；榜单页可见；/game/api/me/scores 有行
-```
+**执行记录**：
+1. ✅ 中心：`sysou-manage` 构建新 jar → 备份 `/opt/sysou-manage/sysou-manage.jar.bak-20261023-m2` → 部署重启；
+   Flyway max=14；`/manage/internal/perms?app=gamevault` 返回 `pv:23, perms:[3 api + 1 menu]`；healthz 200。
+   `MANAGE_INTERNAL_TOKENS` 已追加 `gamevault:<32hex>`（token 仅在 VPS env，已备份 `*.bak-20261023-m2`）。
+2. ✅ GameVault：env 追加三行——`GAMEVAULT_JWT_ISSUER=https://www.sysou.com/manage/api`（⚠️ 含 /api，与中心 MANAGE_JWT_ISSUER 逐字符一致）、
+   `GAMEVAULT_INTERNAL_TOKEN=<与①同值>`、`GAMEVAULT_ADMIN_ENFORCE_AUTH=true`；`deploy/deploy.sh` SMOKE PASS（含兄弟前缀 COOP/COEP 不泄漏检查）。
+3. ✅ 验收（生产签名 JWT 实测，用 VPS 本地 JWKS 私钥在 VPS 上签，密钥不出 VPS）：
+   - a. 未登录：`POST /api/scores` 401；`GET /api/admin/games` 401
+   - c. 无权限点用户：`GET /api/admin/games` **403** `需要权限点 gamevault:admin:game-status`（PermCache 回源中心成功）；`POST /api/scores` **200** rank=1
+   - d. 登录态：`/api/me` 200、`/api/games/reflex-rush/leaderboard` 200
+   - b-pa. `pa=true` JWT：`GET /api/admin/games` 200（平台管理员旁路生效）
+   - （b. `gamevault_admin` 角色账号浏览器管理台 = 用户验收项；API 层 3 点已由 403/200 覆盖，菜单点 `gamevault:menu:admin` 已在中心注册）
+4. ✅ 生产测试数据已清：榜单 ZSET/pending 队列/PG 全空，VPS `/tmp/jwtsign` 已删。
 
-回滚预案：GameVault 侧 = `deploy.sh` 重部署旧 jar（V2 迁移不可回滚但只改列类型，旧代码不读 user_id）；
+回滚预案（未用）：GameVault 侧 = `deploy.sh` 重部署旧 jar（V2 迁移不可回滚但只改列类型，旧代码不读 user_id）；
 中心侧 = sysou-manage 重部署上一版 jar（Flyway 不回滚，V14 只增行，无破坏）。
 
 ## 七、M2 之后的顺序（01 文档 §11）
