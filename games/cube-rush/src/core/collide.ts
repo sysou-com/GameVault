@@ -30,3 +30,11 @@ export function coinPickup(px: number, py: number, coin: { x: number; y: number;
   const dx = px - coin.x, dy = py - coin.y, dz = -coin.z;
   return dx * dx + dy * dy + dz * dz <= r * r;
 }
+
+/** 两 AABB 最近点距离（重叠/包含 = 0；每轴：分离间隙 max(0, |Δc| − (sa+sb)/2)，平方和开方）。近失判定用（04 §1.4）。 */
+export function boxSeparation(a: Box3, b: Box3): number {
+  const dx = Math.max(0, Math.abs(a.cx - b.cx) - (a.sx + b.sx) / 2);
+  const dy = Math.max(0, Math.abs(a.cy - b.cy) - (a.sy + b.sy) / 2);
+  const dz = Math.max(0, Math.abs(a.cz - b.cz) - (a.sz + b.sz) / 2);
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}

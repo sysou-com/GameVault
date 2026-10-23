@@ -25,6 +25,22 @@
     #hud-right { position: absolute; top: 12px; right: 14px; text-align: right; }
     #hud-speed { font-size: 13px; color: #9fb4ff; }
     #hud-fx { font-size: 18px; font-weight: 700; color: #ffd54a; min-height: 24px; text-shadow: 0 0 10px rgba(255,213,74,.6); }
+    /* combo 条（04 §1.4：顶部中 ×N + 衰减进度） */
+    #hud-combo { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); text-align: center; }
+    #hud-combo-val { font-size: 20px; font-weight: 900; color: #ffd54a; text-shadow: 0 0 12px rgba(255,179,0,.8); letter-spacing: 1px; }
+    #hud-combo-bar { width: 130px; height: 5px; margin: 3px auto 0; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; }
+    #hud-combo-bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ffd54a, #ff8a00); border-radius: 3px; }
+    #hud-groove { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); font-size: 13px; font-weight: 800; color: #b44bff; letter-spacing: 2px; text-shadow: 0 0 12px rgba(180,75,255,.9); }
+    #hud-groove.active { animation: groovePulse .47s infinite alternate; }
+    @keyframes groovePulse { from { opacity: .6; } to { opacity: 1; text-shadow: 0 0 20px rgba(180,75,255,1); } }
+    /* 飘字（04 §1.4/§1.5：CLOSE! / FLOW / 协同） */
+    #float-layer { position: fixed; inset: 0; pointer-events: none; z-index: 12; }
+    .float-txt { position: absolute; top: 30%; font-size: 22px; font-weight: 900; letter-spacing: 2px; animation: floatUp .85s ease-out forwards; text-shadow: 0 0 16px currentColor; }
+    @keyframes floatUp { 0% { opacity: 0; transform: translateY(14px) scale(.8); } 18% { opacity: 1; transform: translateY(0) scale(1.12); } 100% { opacity: 0; transform: translateY(-56px) scale(1); } }
+    .float-cyan { color: #00e5ff; } .flow-gold, .gold { color: #ffd54a; } .purple { color: #b44bff; } .red { color: #ff5722; } .flow { color: #b44bff; }
+    /* 屏幕特效叠加（速度线/节拍脉冲/闪白）+ 晕影 */
+    #fx { position: fixed; inset: 0; z-index: 8; pointer-events: none; }
+    #vignette { position: fixed; inset: 0; z-index: 7; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(2,2,10,.55) 100%); }
     #hud-hint { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #5a6a9a; }
     @media (pointer: coarse) { #hud-hint-desktop { display: none; } }
     @media (pointer: fine) { #hud-hint-touch { display: none; } }
@@ -60,6 +76,8 @@
 </head>
 <body>
   <canvas id="game"></canvas>
+  <canvas id="fx"></canvas>
+  <div id="vignette"></div>
 
   <div id="boot">
     <div class="bar"><i></i></div>
@@ -74,22 +92,28 @@
       <div id="hud-score">0</div>
       <div id="hud-meters">0 m</div>
     </div>
+    <div id="hud-combo" class="hidden">
+      <div id="hud-combo-val">×1</div>
+      <div id="hud-combo-bar"><i></i></div>
+    </div>
+    <div id="hud-groove" class="hidden">◈ GROOVE ×1.5</div>
     <div id="hud-right">
       <div id="hud-speed">0 m/s</div>
       <div id="hud-fx"></div>
     </div>
     <div id="hud-hint">
       <span id="hud-hint-desktop">A/D 或 ←→ 换道 · 空格 跳（二段）· Shift 滑铲 · P 暂停</span>
-      <span id="hud-hint-touch">←→ 滑动换道 · 点按跳（可二段）· 下滑滑铲</span>
+      <span id="hud-hint-touch">←→ 滑动换道 · 点按跳（可二段）· 下滑/底部长按 滑铲</span>
     </div>
   </div>
+  <div id="float-layer"></div>
 
   <!-- 菜单 -->
   <div id="ui-menu" class="screen">
     <div class="card">
       <span class="badge" id="backend-badge">WebGPU</span>
       <h1>CUBE RUSH<small>方 块 狂 奔</small></h1>
-      <div class="rule">三车道霓虹轨道 · 无尽跑酷<br/>跳过低栏 · 滑铲躲高栏 · 钻缝隙过旋转锯<br/>×2 能量门 · 500m 检查点无敌</div>
+      <div class="rule">三车道霓虹轨道 · 无尽跑酷<br/>跳过低栏 · 滑铲躲高栏 · 钻缝隙过旋转锯<br/>×2 能量门 · 红门 Boost 爆发 · 紫门节奏门（拍点跳跃 = FLOW）<br/>500m 检查点无敌 · 关卡随 128BPM 音乐生成</div>
       <div class="best">历史最佳 <b id="best-menu">—</b></div>
       <div class="row">
         <button class="btn btn-primary" id="btn-start">开始狂奔</button>
@@ -121,6 +145,8 @@
         <div>金币<b id="coins-result">0</b></div>
         <div>检查点<b id="cps-result">0</b></div>
         <div>极速<b id="speed-result">0 m/s</b></div>
+        <div>近失<b id="nm-result">0</b></div>
+        <div>FLOW PERFECT<b id="flow-result">0</b></div>
         <div>历史最佳<b id="best-result">0</b></div>
       </div>
       <div class="row">

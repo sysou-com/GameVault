@@ -8,6 +8,8 @@ import { Game } from './game/Game.ts'
 import { bindInput } from './input/input.ts'
 import { createAudio } from './audio/synth.ts'
 import { createUi } from './ui/ui.ts'
+import { createPostFx } from './render/post.ts'
+import { createAdaptiveQuality } from './render/adaptive.ts'
 import {
   initBridge, sendReady, sendError, sendTrack, submitScore,
   type PlatformUser,
@@ -56,6 +58,23 @@ async function main(): Promise<void> {
   let lastResult: RunResult | null = null
   let trackStartMs = 0
 
+  // 自适应三档画质（04 §2.3/§3：FPS 窗口决策；触控默认中档起步）+ 屏幕特效层（速度线/节拍脉冲/闪白）
+  const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window
+  const fxCanvas = document.getElementById('fx') as HTMLCanvasElement
+  let quality = createAdaptiveQuality(isTouch, (t) => {
+    game.setRhythmJudged(quality.rhythmJudged())
+    game.setParticleBudget(quality.particles())
+    resize()
+  })
+  // ?debug=1&forceTier=0|1|2：强制档位（泡测用——窗口被遮挡时 rAF 被节流，自适应会误降 T2）
+  const forceTier = new URLSearchParams(location.search).get('forceTier')
+  if (forceTier !== null && ['0', '1', '2'].includes(forceTier)) {
+    const t = Number(forceTier) as 0 | 1 | 2
+    quality = { ...quality, note: () => undefined, tier: () => t }
+  }
+  const postFx = createPostFx(fxCanvas)
+  let fpsSmooth = 60
+
   const game = new Game(renderer, canvas, {
     webgpu,
     audio,
@@ -77,7 +96,22 @@ async function main(): Promise<void> {
     onHud(h) {
       ui.showHud(h)
     },
-    onDeath() { /* 相机抖动在 Game 内 */ },
+    onFloat(text, cls) {
+      ui.float(text, cls)
+    },
+    onDeath() { /* 相机抖动/闪白在 Game 内 + postFx 闪白 */ },
+    onFrame(dtMs) {
+      quality.note(dtMs)
+      fpsSmooth += ((dtMs > 0 ? 1000 / dtMs : 60) - fpsSmooth) * 0.05
+      postFx.update(dtMs, {
+        speed: game.speedNow(),
+        maxSpeed: 30,
+        boost: game.boostNow(),
+        groove: game.grooveNow().active,
+        beatPulse: game.beatPulse(),
+        running: game.phaseNow === 'running',
+      }, game.consumeFlash())
+    },
   })
 
   const ui = createUi({
@@ -185,19 +219,20 @@ async function main(): Promise<void> {
     if (document.hidden && game.phaseNow === 'running') game.pause()
   })
 
-  // 尺寸（像素比上限 2，04 §2.3 自适应；低端机后续可降 1.0）
+  // 尺寸（像素比上限随自适应档位：min(dpr, 2/1.5/1.0)，04 §2.3 三档；触控默认中档起步）
   function resize(): void {
     const w = window.innerWidth
     const h = window.innerHeight
     // iframe 布局未定（瞬时 0 尺寸）时不写入 0——WebGPURenderer 对 0 尺寸 swapchain 会抛
     // 「Could not create a swapchain texture of size 0」GPUValidationError（r186 实机复现）。
     if (w <= 0 || h <= 0) return
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const dpr = quality.dpr(window.devicePixelRatio || 1)
     canvas.width = Math.floor(w * dpr)
     canvas.height = Math.floor(h * dpr)
     canvas.style.width = w + 'px'
     canvas.style.height = h + 'px'
     game.resize(canvas.width, canvas.height)
+    postFx.resize(w, h)
   }
   window.addEventListener('resize', resize)
   // ResizeObserver：可靠捕获 iframe 0→确定尺寸的布局过渡（resize 事件在 iframe 里可能不触发）。
@@ -207,9 +242,14 @@ async function main(): Promise<void> {
   // 启动
   boot.classList.add('hidden')
   ui.showMenu(readBest(), webgpu)
+  // 强制档位生效（泡测）：应用判定/粒子开关
+  if (forceTier !== null && ['0', '1', '2'].includes(forceTier)) {
+    game.setRhythmJudged(quality.rhythmJudged())
+    game.setParticleBudget(quality.particles())
+  }
   game.startLoop()
   sendReady({
-    version: '1.0.0',
+    version: '1.1.0',
     engine: 'threejs',
     dpr: Math.min(window.devicePixelRatio || 1, 2),
     webgpu,
@@ -219,12 +259,34 @@ async function main(): Promise<void> {
   if (new URLSearchParams(location.search).has('debug')) {
     (window as unknown as Record<string, unknown>).__cr = {
       game,
+      quality: () => quality.tier(),
+      fps: () => Math.round(fpsSmooth),
       view: () => ({
         phase: game.phaseNow,
         lane: game.playerLane(),
         meters: game.meters(),
+        beatMs: game.beatMsNow(),
+        groove: game.grooveNow(),
+        combo: game.comboNow(),
+        drawCalls: game.drawCalls(),
+        census: game.census(),
+        nextRhythmGate: game.nextRhythmGate(),
         nextObstacles: game.nextObstacles(45),
       }),
+      // 跳米数到节奏门前（泡测 FLOW 判定用）
+      warpToM: (m: number) => {
+        const g = game as unknown as { jumpTo(m: number): void }
+        g.jumpTo(m)
+      },
+      warpBeat: (ms: number) => {
+        const g = game as unknown as { warpBeatMs(ms: number): void }
+        g.warpBeatMs(ms)
+      },
+      // 手动驱动逻辑步（窗口被遮挡 rAF 暂停时手动推进模拟）
+      step: (ms: number) => {
+        const g = game as unknown as { debugStep(ms: number): void }
+        g.debugStep(ms)
+      },
     }
   }
 }

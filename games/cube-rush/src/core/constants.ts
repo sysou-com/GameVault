@@ -13,7 +13,7 @@ export const PLAYER = {
   laneLerpMs: 150,      // 换道插值时长（easeOut）
 } as const;
 
-/** 速度曲线（m/s）：起点 14，3000m 封顶 30；每 250m 一档。 */
+/** 速度曲线（m/s）：起点 14，每 250m 一档 +0.8，5000m 封顶 30。 */
 export const SPEED = {
   base: 14,
   max: 30,
@@ -62,13 +62,38 @@ export const SPAWN_BANDS: SpawnBand[] = [
   { from: 2500, gap: [6, 8],   weights: { block: 32, laserLow: 16, laserHigh: 22, saw: 30 } },
 ];
 
-/** 能量门：×2 得分 10s / 护盾 3s / 磁力 8s。 */
+/** 能量门：×2 得分 10s / 护盾 3s / 磁力 8s（类型色：×2=绿 / 护盾=青 / 磁力=金）。 */
 export const ENERGY = {
   score:  { ms: 10000, color: 0x00ff88 },
   shield: { ms: 3000,  color: 0x00e5ff },
   magnet: { ms: 8000,  color: 0xffb300 },
 } as const;
 export const ENERGY_GATE_EVERY_M = 750;   // 每 750m 一个能量门（类型轮转 score→shield→magnet）
+
+/** Boost 门（04 §1.1：2s 无敌 + 1.6× 速度爆发 + 路径金币自动吸入；800m 后出现，每 800m 一扇）。 */
+export const BOOST = {
+  firstM: 800,
+  everyM: 800,
+  ms: 2000,
+  speedMult: 1.6,
+  invincibleMs: 2000,
+  bonusPerSec: 1000,   // +100/0.1s
+} as const;
+
+/** 节奏门配色（04 §1.3：节奏=紫）。 */
+export const RHYTHM_GATE_COLOR = 0xb44bff;
+export const BOOST_GATE_COLOR = 0xff3b3b;
+
+/** 激光栏预警示（04 §1.3 公平性红线：障碍必须先可见可读、再致死）。
+ * 状态机（按到岸时间 tta）：tta>0.8s 暗态（非致死）→ 0.4~0.8s 闪烁预警示（非致死）→
+ * ≤0.4s 点亮（致死）。发射器+微光束全程可见（220m 外可读），点亮只是「激活」。 */
+export const LASER = { warnS: 0.8, activeS: 0.4 } as const;
+
+/** 近失擦过（04 §1.4：通过障碍最近距离 < 0.35m 且未碰撞 → +200×倍率 + CLOSE! 飘字 + 0.05s 顿帧）。 */
+export const NEAR_MISS = { threshold: 0.35, score: 200, hitStopMs: 50 } as const;
+
+/** 顿帧（04 §1.3 juice：大金币拾取 0.05s 冻结）。 */
+export const HITSTOP = { bigCoinMs: 50 } as const;
 
 /** 检查点闪门：每 500m，+5000 分 + 1.5s 无敌。 */
 export const CHECKPOINT = { everyM: 500, score: 5000, invincibleMs: 1500 } as const;
@@ -82,6 +107,9 @@ export const SCORE = {
   noHitSegmentM: 500,
   noHitSegmentScore: 2000,
   max: 99999999,
+  /** 大金币 = 1,000 分（普通金币 100；金币串 1% 概率出一枚大金币）。 */
+  bigCoin: 1000,
+  bigCoinChance: 0.01,
 } as const;
 
 /** 逻辑固定步长（60Hz）。 */

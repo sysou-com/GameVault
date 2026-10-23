@@ -14,7 +14,10 @@ export interface RendererSetup {
 }
 
 export async function createRenderer(canvas: HTMLCanvasElement): Promise<RendererSetup> {
-  const renderer = new WebGPURenderer({ canvas, antialias: true, alpha: false })
+  // ?webgl=1 强制 WebGL 后端（泡测 draw call 验收用：WebGL 的 info.render.calls 是每帧值；
+  // r186 WebGPU 后端该计数器不是每帧重置，不能直接验收 04 §3 ≤64）
+  const forceWebGL = new URLSearchParams(location.search).has('webgl')
+  const renderer = new WebGPURenderer({ canvas, antialias: true, alpha: false, forceWebGL })
   try {
     await renderer.init()
   } catch (e) {

@@ -1,15 +1,15 @@
 {
   "schema": "gamevault/manifest@1",
   "game": "cube-rush",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "title": "方块狂奔",
   "engine": "threejs",
   "language": "typescript",
   "entry": "index.html",
   "cover": "cover.svg",
   "size": {
-    "totalBytes": 819711,
-    "initialLoadBytes": 819711,
+    "totalBytes": 875120,
+    "initialLoadBytes": 875120,
     "maxAssetBytes": 200000000
   },
   "viewport": {
@@ -64,6 +64,23 @@
           999
         ]
       },
+      "nearMisses": {
+        "type": "int",
+        "range": [
+          0,
+          9999
+        ]
+      },
+      "flowPerfect": {
+        "type": "int",
+        "range": [
+          0,
+          9999
+        ]
+      },
+      "mode": {
+        "type": "string"
+      },
       "clean": {
         "type": "bool"
       }
@@ -113,5 +130,5 @@
   "audio": {
     "requiresGesture": true
   },
-  "notes": "Three.js 0.186.1（2026-09-24 发布，2026-10-23 npm 核实时为 latest）WebGPURenderer 内建回退 WebGL2（04 文档 §2.1 选型裁定；three/webgpu 子入口 + await init()，按 0.186.1 源码核实）+ TypeScript + Vite。零外部资产：全部几何体程序化（Box/Cylinder/Torus/Sprite），无 .glb/纹理/音频文件（04 原定 glb+ogg 按零资产路线修订，与 neon-raid 一致）；BGM/SFX 全部 WebAudio 合成；Bloom 按 04 §5 批准的降级方案 = emissive + 运行时径向渐变假辉光 sprite（双后端统一，移动端友好）。碰撞为手写 AABB（无物理引擎，04 §2.1）；障碍生成确定性（seed+chunkIndex，单测断言）；固定 60Hz 逻辑步 + rAF 渲染解耦（防螺旋死亡）；移动端触控（滑动换道/点按跳/下滑滑铲）+ 像素比上限 2。"
+  "notes": "v1.1.0 = W3「优」视觉包 + W4「奇」节拍系统（04 文档 §1.3/§1.4/§1.5，2026-10-23）。Three.js 0.186.1 WebGPURenderer 内建回退 WebGL2（three/webgpu 子入口 + await init()）+ TypeScript + Vite。零外部资产：全部几何程序化（Box/Cylinder/Torus/Extrude/InstancedMesh）+ Canvas 程序纹理（警示条纹/网格/符文环/假辉光），无 .glb/纹理/音频文件；BGM/SFX 全部 WebAudio 合成（128BPM 4/4，节拍时间线与关卡生成同源——核心「奇」点：节奏门 FLOW 判定 + Groove 模式，rhythm.ts 纯函数单测）。后处理：r186 官方 EffectComposer 仅 WebGL（2026-10-23 源码核实），按 04 §5 预批降级方案双后端统一假辉光 sprite；屏幕 juice（速度线/节拍脉冲/闪白）走 2D canvas 叠加层（post.ts）。Bloom 效果由 glow sprite + emissive 承担（双后端一致）。碰撞手写 AABB（无物理引擎）；激光预警示状态机（先可见可读再致死，04 §1.3 公平性）；障碍/门/金币全部量化到节拍格（确定性，单测断言）；固定 60Hz 逻辑步 + rAF 渲染解耦，判定时钟=逻辑步累积（不读 rAF 时间戳）；自适应三档画质（FPS 窗口决策，低档节奏门只通过不判定）；连击/近失/道具协同（黄金风暴/铁壁火箭）；移动端触控（滑动换道/点按跳/下滑或底部长按滑铲，整屏触控面）+ 像素比三档。meta 新增 nearMisses/flowPerfect/mode（平台按 metaSchema 通用校验，后端零改动）。"
 }

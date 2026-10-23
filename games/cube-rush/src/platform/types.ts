@@ -6,8 +6,14 @@ export interface ScoreMeta {
   magnetCoins: number
   checkpoints: number
   maxSpeed: number
+  /** 近失擦过次数（04 §1.4）。 */
+  nearMisses: number
+  /** FLOW PERFECT 次数（04 §1.5）。 */
+  flowPerfect: number
   /** 2000m 无伤（成就 NO_HIT_2K：game_over meta 子集 {clean:true}）。 */
   clean: boolean
+  /** 模式（04 §1.1：街机默认；v1.1 加 rhythm）。 */
+  mode: string
 }
 
 export interface RunResult {

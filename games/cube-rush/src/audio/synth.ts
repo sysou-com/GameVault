@@ -1,25 +1,34 @@
 /**
  * 音频（WebAudio 全合成，04 §1.3；requiresGesture=true —— 首次 pointerdown/keydown 后初始化）。
- * 零音频资产（与 neon-raid 同款路线）：BGM 一首赛博 lo-fi（lookahead 调度循环），SFX 6 条。
+ * 零音频资产（与 neon-raid 同款路线）：
+ * - BGM 赛博 lo-fi，**固定 128 BPM 4/4**（04 §1.5 节拍系统数据源：节拍时间线 = k × 60/128 s，
+ *   与 rhythm.ts 的 BEAT_DUR_MS 同源；判定用逻辑时钟，音频只负责「听感跟拍」）。
+ * - Groove 模式叠加低音层（WebAudio gain 节点分层切换，04 §1.5：连续 3 次 FLOW PERFECT 触发）。
+ * - SFX 9 条：基础 6（换道/跳/金币/护盾/检查点/撞毁）+ W4 新增 3（近失「嗖」/FLOW「叮」/boost「轰」）。
  */
 
 const midiHz = (m: number): number => 440 * Math.pow(2, (m - 69) / 12)
 
-// 赛博 lo-fi：Bb minor 味（B 根音 47），8 步 bass + 16 步 arp + 4 和弦 pad
+// 赛博 lo-fi：Bb 味（B 根音 47），128 BPM 4/4 —— 8 步 bass + 16 步 arp + 4 和弦 pad
 const BGM = {
-  bpm: 104,
+  bpm: 128,
   root: 47,
   bass: [0, -1, 0, -1, 3, -1, 3, 5] as number[],
   arp: [12, -1, 15, -1, 19, -1, 15, -1, 12, -1, 15, -1, 22, -1, 19, -1] as number[],
   pad: [[0, 3, 7], [0, 3, 7], [-2, 0, 4], [3, 7, 10]] as number[][],
 }
 
+/** BGM 起拍延迟（ms）：startBgm 后首拍距调用时刻。Game 用它对齐逻辑节拍时钟（runTime 起点 −100ms）。 */
+export const BGM_START_DELAY_MS = 100
+
 export interface AudioEngine {
   init(volume: number): void
   setVolume(v: number): void
-  startBgm(): void
+  startBgm(): number // 返回首拍延迟 ms（供逻辑节拍时钟对齐）
   stopBgm(): void
-  sfx(name: 'lane' | 'jump' | 'coin' | 'energy' | 'checkpoint' | 'crash'): void
+  /** Groove 低音层开关（04 §1.5：×1.5 得分 + 低音层 + 速度线增强）。 */
+  setGroove(on: boolean): void
+  sfx(name: 'lane' | 'jump' | 'coin' | 'energy' | 'checkpoint' | 'crash' | 'near' | 'flow' | 'flowPerfect' | 'boost'): void
   muted(): boolean
   setMuted(m: boolean): void
 }
@@ -29,6 +38,7 @@ export function createAudio(): AudioEngine {
   let master: GainNode | null = null
   let bgmGain: GainNode | null = null
   let sfxGain: GainNode | null = null
+  let grooveGain: GainNode | null = null // Groove 低音层（默认 0 增益）
   let volume = 0.7
   let muted = false
   let timer: number | null = null
@@ -51,6 +61,9 @@ export function createAudio(): AudioEngine {
     bgmGain = ctx.createGain()
     bgmGain.gain.value = 0.42
     bgmGain.connect(master)
+    grooveGain = ctx.createGain()
+    grooveGain.gain.value = 0
+    grooveGain.connect(bgmGain)
     sfxGain = ctx.createGain()
     sfxGain.gain.value = 0.9
     sfxGain.connect(master)
@@ -66,15 +79,20 @@ export function createAudio(): AudioEngine {
     setVolume(volume)
   }
 
-  // ---- BGM 调度（lookahead 200ms，step = 16th） ----
+  // ---- BGM 调度（lookahead 200ms，step = 16th；128BPM） ----
   const scheduleStep = (s: number, t: number): void => {
     if (!ctx || !bgmGain) return
+    const stepDur = 60 / BGM.bpm / 4
     // bass（每 2 step 一拍，8 步循环）
     const b = BGM.bass[(s >> 1) % 8]
     if (b >= 0) blip(t, 'sine', midiHz(BGM.root + b), 0.32, 0.5, bgmGain)
+    // Groove 低音层：sub-octave sine（与 bass 同步，gain 层由 setGroove 开关）
+    if (b >= 0 && grooveGain) blip(t, 'sine', midiHz(BGM.root + b - 12), 0.34, 0.8, grooveGain)
     // arp（16 步，三角波轻）
     const a = BGM.arp[s % 16]
     if (a >= 0) blip(t, 'triangle', midiHz(BGM.root + 12 + a), 0.16, 0.22, bgmGain)
+    // 底鼓：每拍轻击（节奏门判定的「听觉拍点」）
+    if (s % 4 === 0) kick(t)
     // pad（每 16 step 换和弦，持续 8 步）
     if (s % 16 === 0) {
       const chord = BGM.pad[(s >> 4) % 4]
@@ -85,19 +103,24 @@ export function createAudio(): AudioEngine {
         const g = ctx.createGain()
         g.gain.setValueAtTime(0, t)
         g.gain.linearRampToValueAtTime(0.05, t + 0.4)
-        g.gain.linearRampToValueAtTime(0, t + (BGM.bpm / 60) * 4)
+        g.gain.linearRampToValueAtTime(0, t + stepDur * 16)
         osc.connect(g)
         g.connect(bgmGain)
         osc.start(t)
-        osc.stop(t + (BGM.bpm / 60) * 4 + 0.05)
+        osc.stop(t + stepDur * 16 + 0.05)
       }
     }
   }
 
-  const startBgm = (): void => {
-    if (!ctx || timer !== null) return
+  const kick = (t: number): void => {
+    if (!ctx || !bgmGain) return
+    blip(t, 'sine', 120, 0.1, 0.25, bgmGain, 45)
+  }
+
+  const startBgm = (): number => {
+    if (!ctx || timer !== null) return 0
     step = 0
-    nextTime = ctx.currentTime + 0.1
+    nextTime = ctx.currentTime + BGM_START_DELAY_MS / 1000
     timer = window.setInterval(() => {
       if (!ctx) return
       const stepDur = 60 / BGM.bpm / 4 // 16th
@@ -107,12 +130,19 @@ export function createAudio(): AudioEngine {
         step = (step + 1) % 32 // 4 和弦 × 16 步
       }
     }, 80)
+    return BGM_START_DELAY_MS
   }
 
   const stopBgm = (): void => {
     if (timer !== null) {
       clearInterval(timer)
       timer = null
+    }
+  }
+
+  const setGroove = (on: boolean): void => {
+    if (ctx && grooveGain) {
+      grooveGain.gain.setTargetAtTime(on ? 0.55 : 0, ctx.currentTime, 0.05)
     }
   }
 
@@ -150,7 +180,7 @@ export function createAudio(): AudioEngine {
     src.start(t)
   }
 
-  const sfx = (name: 'lane' | 'jump' | 'coin' | 'energy' | 'checkpoint' | 'crash'): void => {
+  const sfx = (name: 'lane' | 'jump' | 'coin' | 'energy' | 'checkpoint' | 'crash' | 'near' | 'flow' | 'flowPerfect' | 'boost'): void => {
     if (!ctx || !sfxGain) return
     const t = ctx.currentTime
     switch (name) {
@@ -177,8 +207,25 @@ export function createAudio(): AudioEngine {
         noise(t, 0.5, 0.5, sfxGain, 3000, 120)
         blip(t, 'sawtooth', 160, 0.4, 0.2, sfxGain, 40)
         break
+      case 'near': // 近失「嗖」（04 §1.3 音频扩展）
+        noise(t, 0.18, 0.22, sfxGain, 4000, 200)
+        blip(t, 'sine', 900, 0.16, 0.1, sfxGain, 2400)
+        break
+      case 'flow': // FLOW GOOD「叮」
+        blip(t, 'sine', 880, 0.18, 0.2, sfxGain)
+        blip(t + 0.06, 'sine', 1174, 0.22, 0.16, sfxGain)
+        break
+      case 'flowPerfect': // FLOW PERFECT「叮+」
+        blip(t, 'sine', 1174, 0.2, 0.22, sfxGain)
+        blip(t + 0.07, 'sine', 1760, 0.26, 0.2, sfxGain)
+        blip(t + 0.14, 'sine', 2217, 0.3, 0.14, sfxGain)
+        break
+      case 'boost': // boost「轰」（04 §1.3 音频扩展）
+        noise(t, 0.4, 0.3, sfxGain, 2500, 200)
+        blip(t, 'sawtooth', 160, 0.45, 0.18, sfxGain, 900)
+        break
     }
   }
 
-  return { init, setVolume, startBgm, stopBgm, sfx, muted: () => muted, setMuted }
+  return { init, setVolume, startBgm, stopBgm, setGroove, sfx, muted: () => muted, setMuted }
 }

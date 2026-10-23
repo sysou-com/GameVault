@@ -1,5 +1,5 @@
 /**
- * UI 覆盖层（DOM；菜单/暂停/结算/HUD/设置。CSS 在 index.html <style>）。
+ * UI 覆盖层（DOM；菜单/暂停/结算/HUD/combo 条/飘字/GROOVE 标签。CSS 在 index.html <style>）。
  * 平台桥联动：结算页显示登录态（bridge.getPlatformUser）+ 提交按钮。
  */
 import { getPlatformUser, type PlatformUser } from '../platform/bridge.ts'
@@ -12,14 +12,32 @@ export interface UiCallbacks {
   onResubmit(): void
 }
 
+export interface HudPayload {
+  score: number
+  meters: number
+  speed: number
+  mult: number
+  shield: boolean
+  magnet: boolean
+  /** 连击（04 §1.4：×1→×8，4s 衰减）。 */
+  comboMult: number
+  comboRemainingMs: number
+  /** Groove 激活（04 §1.5：×1.5 + 低音层）。 */
+  groove: boolean
+  boost: boolean
+  flow: boolean
+}
+
 export interface Ui {
   showMenu(best: number, webgpu: boolean): void
-  showHud(h: { score: number; meters: number; speed: number; mult: number; shield: boolean; magnet: boolean }): void
+  showHud(h: HudPayload): void
   hideHud(): void
   showPause(): void
   hidePause(): void
   showResult(r: { score: number; meta: ScoreMeta; best: number; isBest: boolean; webgpu: boolean }): void
   setLoginUser(u: PlatformUser | null): void
+  /** 飘字（CLOSE! / FLOW / FLOW PERFECT / GOLD STORM / IRON WALL ROCKET…；DOM 池化 + CSS 动画）。 */
+  float(text: string, cls?: 'flow' | 'gold' | 'purple' | 'red' | 'cyan'): void
 }
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!
@@ -34,6 +52,11 @@ export function createUi(cb: UiCallbacks): Ui {
     meters: $('hud-meters'),
     speed: $('hud-speed'),
     fx: $('hud-fx'),
+    comboWrap: $('hud-combo'),
+    comboVal: $('hud-combo-val'),
+    comboBar: $('hud-combo-bar'),
+    groove: $('hud-groove'),
+    floatLayer: $('float-layer'),
     bestMenu: $('best-menu'),
     bestResult: $('best-result'),
     scoreResult: $('score-result'),
@@ -41,6 +64,8 @@ export function createUi(cb: UiCallbacks): Ui {
     coinsResult: $('coins-result'),
     cpsResult: $('cps-result'),
     speedResult: $('speed-result'),
+    nmResult: $('nm-result'),
+    flowResult: $('flow-result'),
     isNewBest: $('new-best'),
     submitBtn: $('btn-submit'),
     backendBadge: $('backend-badge'),
@@ -93,7 +118,18 @@ export function createUi(cb: UiCallbacks): Ui {
       if (h.mult > 1) fx.push('×2')
       if (h.shield) fx.push('🛡')
       if (h.magnet) fx.push('🧲')
+      if (h.boost) fx.push('🚀')
       el.fx.textContent = fx.join(' ')
+      // combo 条（×N + 4s 衰减进度；04 §1.4 HUD）
+      if (h.comboMult > 1) {
+        el.comboWrap.classList.remove('hidden')
+        el.comboVal.textContent = '×' + h.comboMult.toFixed(2).replace(/0$/, '')
+        el.comboBar.style.width = ((h.comboRemainingMs / 4000) * 100).toFixed(1) + '%'
+      } else {
+        el.comboWrap.classList.add('hidden')
+      }
+      el.groove.classList.toggle('hidden', !h.groove)
+      el.groove.classList.toggle('active', h.groove)
     },
     hideHud() { hide(el.hud) },
     showPause() { show(el.pause) },
@@ -105,6 +141,8 @@ export function createUi(cb: UiCallbacks): Ui {
       el.coinsResult.textContent = String(r.meta.coins)
       el.cpsResult.textContent = String(r.meta.checkpoints)
       el.speedResult.textContent = r.meta.maxSpeed.toFixed(1) + ' m/s'
+      el.nmResult.textContent = String(r.meta.nearMisses)
+      el.flowResult.textContent = String(r.meta.flowPerfect)
       el.bestResult.textContent = String(r.best)
       el.isNewBest.classList.toggle('hidden', !r.isBest)
       el.backendBadgeResult.textContent = r.webgpu ? 'WebGPU ✓' : 'WebGL2 兼容模式'
@@ -118,6 +156,14 @@ export function createUi(cb: UiCallbacks): Ui {
       if (!el.result.classList.contains('hidden')) {
         el.submitBtn.classList.toggle('hidden', !user || user.anonymous)
       }
+    },
+    float(text, cls = 'cyan') {
+      const s = document.createElement('span')
+      s.className = `float-txt float-${cls}`
+      s.textContent = text
+      s.style.left = `${46 + Math.random() * 8}%`
+      el.floatLayer.appendChild(s)
+      window.setTimeout(() => s.remove(), 900)
     },
   }
 }
