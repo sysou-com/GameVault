@@ -1,0 +1,117 @@
+{
+  "schema": "gamevault/manifest@1",
+  "game": "cube-rush",
+  "version": "1.0.0",
+  "title": "方块狂奔",
+  "engine": "threejs",
+  "language": "typescript",
+  "entry": "index.html",
+  "cover": "cover.svg",
+  "size": {
+    "totalBytes": 819135,
+    "initialLoadBytes": 819135,
+    "maxAssetBytes": 200000000
+  },
+  "viewport": {
+    "base": [
+      1280,
+      720
+    ],
+    "scale": "fit",
+    "touch": true
+  },
+  "score": {
+    "enabled": true,
+    "range": [
+      0,
+      99999999
+    ],
+    "unit": "分",
+    "higherIsBetter": true,
+    "metaSchema": {
+      "meters": {
+        "type": "int",
+        "range": [
+          0,
+          9999999
+        ]
+      },
+      "coins": {
+        "type": "int",
+        "range": [
+          0,
+          999999
+        ]
+      },
+      "magnetCoins": {
+        "type": "int",
+        "range": [
+          0,
+          999999
+        ]
+      },
+      "checkpoints": {
+        "type": "int",
+        "range": [
+          0,
+          9999
+        ]
+      },
+      "maxSpeed": {
+        "type": "int",
+        "range": [
+          0,
+          999
+        ]
+      },
+      "clean": {
+        "type": "bool"
+      }
+    },
+    "minPlayMs": 3000
+  },
+  "achievements": [
+    {
+      "code": "FIRST_1K",
+      "title": "千米狂奔",
+      "description": "单局跑满 1000 米",
+      "rule": {
+        "type": "combo_gte",
+        "value": 1000,
+        "field": "meters"
+      },
+      "icon": "a1.svg"
+    },
+    {
+      "code": "MAGNET_MASTER",
+      "title": "磁力满仓",
+      "description": "磁力状态下吸满 100 枚金币",
+      "rule": {
+        "type": "combo_gte",
+        "value": 100,
+        "field": "magnetCoins"
+      },
+      "icon": "a2.svg"
+    },
+    {
+      "code": "NO_HIT_2K",
+      "title": "无痕两千米",
+      "description": "2000 米无伤通关（零碰撞）",
+      "rule": {
+        "type": "game_over",
+        "meta": {
+          "clean": true
+        }
+      },
+      "icon": "a3.svg"
+    }
+  ],
+  "saves": {
+    "localStoragePrefix": "cube-rush.",
+    "maxBytes": 204800
+  },
+  "audio": {
+    "requiresGesture": true
+  },
+  "notes": "Three.js 0.186.1（2026-09-24 发布，2026-10-23 npm 核实时为 latest）WebGPURenderer 内建回退 WebGL2（04 文档 §2.1 选型裁定；three/webgpu 子入口 + await init()，按 0.186.1 源码核实）+ TypeScript + Vite。零外部资产：全部几何体程序化（Box/Cylinder/Torus/Sprite），无 .glb/纹理/音频文件（04 原定 glb+ogg 按零资产路线修订，与 neon-raid 一致）；BGM/SFX 全部 WebAudio 合成；Bloom 按 04 §5 批准的降级方案 = emissive + 运行时径向渐变假辉光 sprite（双后端统一，移动端友好）。碰撞为手写 AABB（无物理引擎，04 §2.1）；障碍生成确定性（seed+chunkIndex，单测断言）；固定 60Hz 逻辑步 + rAF 渲染解耦（防螺旋死亡）；移动端触控（滑动换道/点按跳/下滑滑铲）+ 像素比上限 2。"
+}

@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#050514"/><stop offset="0.55" stop-color="#12082a"/><stop offset="1" stop-color="#0a0a18"/>
+    </linearGradient>
+    <linearGradient id="track" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#1c1c30"/><stop offset="1" stop-color="#0d0d1c"/>
+    </linearGradient>
+    <linearGradient id="cube" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00e5ff"/><stop offset="1" stop-color="#2d6bff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.62" r="0.5">
+      <stop offset="0" stop-color="#00e5ff" stop-opacity="0.35"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <!-- 远景城市剪影 -->
+  <g fill="#0c0c1a">
+    <rect x="40" y="240" width="34" height="200"/><rect x="90" y="180" width="46" height="260"/><rect x="150" y="270" width="30" height="170"/>
+    <rect x="1010" y="220" width="40" height="220"/><rect x="1070" y="160" width="52" height="280"/><rect x="1140" y="250" width="34" height="190"/><rect x="1190" y="210" width="48" height="230"/>
+  </g>
+  <g fill="#1a0b2e" opacity="0.8">
+    <rect x="60" y="270" width="4" height="6"/><rect x="106" y="210" width="5" height="7"/><rect x="1082" y="250" width="5" height="7"/><rect x="1150" y="280" width="4" height="6"/>
+  </g>
+  <!-- 透视轨道 -->
+  <polygon points="540,440 740,440 1080,720 200,720" fill="url(#track)"/>
+  <g stroke="#2a2a4a" stroke-width="2">
+    <line x1="592" y1="440" x2="552" y2="720"/><line x1="688" y1="440" x2="728" y2="720"/>
+  </g>
+  <g stroke="#00e5ff" stroke-width="4" opacity="0.9">
+    <line x1="540" y1="440" x2="200" y2="720"/>
+  </g>
+  <g stroke="#ff2d78" stroke-width="4" opacity="0.9">
+    <line x1="740" y1="440" x2="1080" y2="720"/>
+  </g>
+  <!-- 轨道横纹（速度感） -->
+  <g stroke="#33335c" stroke-width="2">
+    <line x1="500" y1="500" x2="780" y2="500"/><line x1="450" y1="570" x2="830" y2="570"/><line x1="380" y1="650" x2="900" y2="650"/>
+  </g>
+  <!-- 障碍剪影 -->
+  <g>
+    <rect x="600" y="392" width="44" height="48" fill="#39394d" stroke="#ff2d78" stroke-width="3"/>
+    <rect x="672" y="470" width="120" height="10" fill="#1a1a2e" stroke="#00e5ff" stroke-width="2" opacity="0.9"/>
+    <circle cx="520" cy="600" r="34" fill="none" stroke="#ff5722" stroke-width="8" stroke-dasharray="18 10"/>
+  </g>
+  <!-- 玩家方块（发光） -->
+  <g>
+    <ellipse cx="640" cy="380" rx="130" ry="70" fill="url(#glow)"/>
+    <g transform="translate(640,330)">
+      <polygon points="-30,10 30,10 30,70 -30,70" fill="#0a1428"/>
+      <polygon points="-30,10 0,-14 30,10 0,34" fill="url(#cube)"/>
+      <polygon points="30,10 58,-2 58,58 30,70" fill="#0e2a4a"/>
+    </g>
+  </g>
+  <!-- 金币 -->
+  <g fill="#ffd54a">
+    <circle cx="470" cy="470" r="9"/><circle cx="420" cy="540" r="11"/><circle cx="360" cy="620" r="13"/>
+  </g>
+  <!-- 标题 -->
+  <text x="96" y="250" font-family="Arial, sans-serif" font-size="110" font-weight="bold" fill="#eafcff" letter-spacing="8">CUBE RUSH</text>
+  <text x="100" y="316" font-family="Arial, sans-serif" font-size="50" font-weight="bold" fill="#00e5ff">方块狂奔</text>
+  <text x="100" y="372" font-family="Arial, sans-serif" font-size="28" fill="#9fb4ff" opacity="0.9">三车道霓虹轨道 · 无尽跑酷 · WebGPU 双档渲染</text>
+  <text x="1140" y="660" font-family="monospace" font-size="26" fill="#00e5ff" text-anchor="end" opacity="0.8">three.js · 0.186 · WebGPU→WebGL2</text>
+</svg>
