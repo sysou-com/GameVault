@@ -6,7 +6,7 @@
       </router-link>
       <nav class="nav">
         <router-link to="/">全部游戏</router-link>
-        <router-link v-if="me" to="/admin">管理台</router-link>
+        <router-link v-if="me && adminOk" to="/admin">管理台</router-link>
         <template v-if="me">
           <span class="user-chip" :title="me.email ?? me.id">{{ me.email ?? me.id.slice(0, 8) }}</span>
           <button class="btn ghost small" @click="onLogout">退出</button>
@@ -47,6 +47,19 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { login, logout, restoreSession, user as me } from './session'
+import { api } from './api'
+
+const adminOk = ref(false)
+
+/** 拉应用侧权限快照（/api/me/perm，中心 RBAC 裁定 #21）：有任一 gamevault:admin:* 点或 pa → 管理台可见。 */
+async function refreshPerm() {
+  try {
+    const p = await api.perm()
+    adminOk.value = p.pa || p.perms.length > 0
+  } catch {
+    adminOk.value = false // 未登录/中心不可达 → 最小权限（不显示管理台）
+  }
+}
 
 const showLogin = ref(false)
 const busy = ref(false)
@@ -62,6 +75,7 @@ async function doLogin() {
     await login(email.value.trim(), password.value)
     showLogin.value = false
     password.value = ''
+    void refreshPerm()
   } catch (e) {
     loginErr.value = e instanceof Error ? e.message : '登录失败'
   } finally {
@@ -70,11 +84,12 @@ async function doLogin() {
 }
 
 async function onLogout() {
+  adminOk.value = false
   await logout()
 }
 
 onMounted(() => {
-  void restoreSession()
+  void restoreSession().then(() => void refreshPerm())
 })
 </script>
 

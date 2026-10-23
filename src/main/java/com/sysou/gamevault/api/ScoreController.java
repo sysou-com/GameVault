@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 登录态 API（01 文档 §5.2，M2）：提分 + 我的分数/成就 + 登录态查询。
@@ -24,10 +25,12 @@ public class ScoreController {
 
     private final LeaderboardApi leaderboard;
     private final AchievementApi achievements;
+    private final PermCache permCache;
 
-    public ScoreController(LeaderboardApi leaderboard, AchievementApi achievements) {
+    public ScoreController(LeaderboardApi leaderboard, AchievementApi achievements, PermCache permCache) {
         this.leaderboard = leaderboard;
         this.achievements = achievements;
+        this.permCache = permCache;
     }
 
     record ScoreSubmitBody(String gameSlug, Long score, JsonNode meta, Long clientTs,
@@ -55,6 +58,17 @@ public class ScoreController {
     public MeResponse me(HttpServletRequest req) {
         JwtVerifier.VerifiedToken t = requireLogin(req);
         return new MeResponse(t.sub(), t.email(), t.roles(), t.platformAdmin());
+    }
+
+    /**
+     * GET /api/me/perm：应用侧权限快照（中心 §4.6 裁定 #21 —— 浏览器必须走应用侧，不能直调中心；
+     * 前端据 perms 控制管理台导航/操作按钮可见性；后端硬校在 AdminController）。
+     */
+    @GetMapping("/api/me/perm")
+    public Map<String, Object> perm(HttpServletRequest req) {
+        JwtVerifier.VerifiedToken t = requireLogin(req);
+        PermCache.Snapshot s = permCache.get(t.sub(), t.pv(), t.platformAdmin());
+        return Map.of("pv", s.pv(), "perms", s.perms(), "pa", s.pa());
     }
 
     /** GET /api/me/scores?gameSlug=（01 §5.2）。 */

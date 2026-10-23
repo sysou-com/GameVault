@@ -18,11 +18,17 @@ public record GamevaultProps(
         }
     }
 
-    public record Jwt(String jwksUrl, String issuer, int keyTtlMin) {
+    public record Jwt(String jwksUrl, String issuer, int keyTtlMin,
+                      /** 中心内部回环令牌（X-Internal-Token，/manage/internal/perms 回源用；空 = 未接入，RBAC 回源不可用）。 */
+                      String internalToken,
+                      /** 中心权限回源端点（§4.6 裁定 #21；默认同机 8093）。 */
+                      String permsUrl) {
         public Jwt {
             if (jwksUrl == null || jwksUrl.isBlank()) jwksUrl = "http://127.0.0.1:8093/manage/api/jwks";
             if (issuer == null) issuer = "";
             if (keyTtlMin <= 0) keyTtlMin = 60;
+            if (internalToken == null) internalToken = "";
+            if (permsUrl == null || permsUrl.isBlank()) permsUrl = "http://127.0.0.1:8093/manage/internal/perms";
         }
     }
 

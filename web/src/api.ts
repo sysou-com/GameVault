@@ -54,6 +54,9 @@ export const api = {
 
   // M2 登录态（§5.2；AuthFilter 对 /api/scores 与 /api/me/** 硬 401）
   me: () => http<Me>('/me'),
+  // M2 RBAC（中心 §4.6 裁定 #21）：应用侧权限快照 —— 浏览器必须走应用侧，不直调中心
+  //（nginx 上 /manage/internal/ 一律 404）；前端据此控制管理台可见性，后端硬校在 AdminController。
+  perm: () => http<{ pv: number; perms: string[]; pa: boolean }>('/me/perm'),
   submitScore: (body: {
     gameSlug: string
     score: number

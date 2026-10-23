@@ -8,6 +8,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -32,6 +33,7 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -58,16 +60,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @EnabledIfSystemProperty(named = "gamevault.it.enabled", matches = "true")
 class PlatformIT {
 
-    // ---- M2：本地 JWKS + 本地签名中心 JWT（不依赖远端中心；验证 JwtVerifier 真实验签路径）----
+    // ---- M2：本地 JWKS + 本地 /perms（不依赖远端中心；验证 JwtVerifier 验签 + PermCache 回源真实路径）----
     static final String TEST_ISSUER = "https://www.sysou.com/manage";
     static final String TEST_KID = "gamevault-it";
+    static final String TEST_INTERNAL_TOKEN = "it-internal-token";
+    static final String ADMIN_SUB = "11111111-2222-3333-4444-555555555555";
     static KeyPair testKeyPair;
-    static HttpServer jwksServer;
-    static int jwksPort;
+    static HttpServer localCenter;
+    static int localCenterPort;
 
     @AfterAll
-    static void stopJwks() {
-        if (jwksServer != null) jwksServer.stop(0);
+    static void stopLocalCenter() {
+        if (localCenter != null) localCenter.stop(0);
     }
 
     /** 开发库凭据只存在 .env.dev（0600，gitignored），不入库不打印（兄弟工程同款纪律）。 */
@@ -95,17 +99,20 @@ class PlatformIT {
         r.add("gamevault.games-dir", () -> "target/it/games");
         r.add("gamevault.staging-dir", () -> "target/it/staging");
         r.add("gamevault.nginx-probe.enabled", () -> "false");
-        r.add("gamevault.admin.enforce-auth", () -> "false");
         try {
             startLocalJwks();
         } catch (Exception e) {
             throw new IllegalStateException("本地 JWKS 启动失败", e);
         }
-        r.add("gamevault.jwt.jwks-url", () -> "http://127.0.0.1:" + jwksPort + "/jwks");
+        r.add("gamevault.jwt.jwks-url", () -> "http://127.0.0.1:" + localCenterPort + "/jwks");
         r.add("gamevault.jwt.issuer", () -> TEST_ISSUER);
+        r.add("gamevault.jwt.internal-token", () -> TEST_INTERNAL_TOKEN);
+        r.add("gamevault.jwt.perms-url", () -> "http://127.0.0.1:" + localCenterPort + "/perms");
+        r.add("gamevault.admin.enforce-auth", () -> "true");
     }
 
     /** 本地 JWKS 服务（随机端口）+ EC P-256 密钥对：中心同构（ES256，JWKS x/y 为 32 字节 base64url）。 */
+    /** 本地「中心」模拟：JWKS（验签）+ /perms（RBAC 回源，中心 §4.6 裁定 #21 同款响应形状）。 */
     static void startLocalJwks() throws Exception {
         KeyPairGenerator gen = KeyPairGenerator.getInstance("EC");
         gen.initialize(new ECGenParameterSpec("secp256r1"));
@@ -115,16 +122,62 @@ class PlatformIT {
         String y = b64url(pad(pub.getW().getAffineY(), 32));
         String jwks = "{\"keys\":[{\"kty\":\"EC\",\"crv\":\"P-256\",\"use\":\"sig\",\"alg\":\"ES256\","
                 + "\"kid\":\"" + TEST_KID + "\",\"x\":\"" + x + "\",\"y\":\"" + y + "\"}]}";
-        jwksServer = HttpServer.create(new InetSocketAddress(0), 0);
-        jwksPort = jwksServer.getAddress().getPort();
-        jwksServer.createContext("/jwks", ex -> {
+        localCenter = HttpServer.create(new InetSocketAddress(0), 0);
+        localCenterPort = localCenter.getAddress().getPort();
+        localCenter.createContext("/jwks", ex -> {
             byte[] body = jwks.getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().add("Content-Type", "application/json");
             ex.sendResponseHeaders(200, body.length);
             ex.getResponseBody().write(body);
             ex.close();
         });
-        jwksServer.start();
+        // /perms：X-Internal-Token 硬校 + 按 sub 返回权限集（ADMIN_SUB 有全部 3 点，其余空集）
+        localCenter.createContext("/perms", ex -> {
+            String token = ex.getRequestHeaders().getFirst("X-Internal-Token");
+            if (!TEST_INTERNAL_TOKEN.equals(token)) {
+                byte[] b = "{\"error\":{\"code\":\"INTERNAL_TOKEN_INVALID\",\"message\":\"internal token\"}}".getBytes(StandardCharsets.UTF_8);
+                ex.sendResponseHeaders(401, b.length);
+                ex.getResponseBody().write(b);
+                ex.close();
+                return;
+            }
+            String sub = query(ex.getRequestURI().getQuery(), "sub");
+            List<String> perms = ADMIN_SUB.equals(sub)
+                    ? List.of("gamevault:admin:package", "gamevault:admin:publish", "gamevault:admin:game-status")
+                    : List.of();
+            String body = "{\"pv\":1,\"perms\":" + jsonList(perms) + ",\"dataScope\":{},\"pa\":false}";
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, bytes.length);
+            ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+        localCenter.start();
+    }
+
+    static String query(String q, String key) {
+        if (q == null) return "";
+        for (String kv : q.split("&")) {
+            int i = kv.indexOf('=');
+            if (i > 0 && kv.substring(0, i).equals(key)) {
+                return java.net.URLDecoder.decode(kv.substring(i + 1), StandardCharsets.UTF_8);
+            }
+        }
+        return "";
+    }
+
+    static String jsonList(List<String> perms) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < perms.size(); i++) {
+            if (i > 0) sb.append(',');
+            sb.append('"').append(perms.get(i)).append('"');
+        }
+        return sb.append(']').toString();
+    }
+
+    /** 管理台管理员 JWT（ADMIN_SUB，本地 /perms 返回全部 3 个权限点）。 */
+    static String adminAuth() {
+        return "Bearer " + signTestJwt(ADMIN_SUB, "it-admin@example.com");
     }
 
     static String signTestJwt(String sub, String email) {
@@ -162,6 +215,18 @@ class PlatformIT {
     @Autowired
     JobProducer jobProducer;
 
+    @Autowired
+    StringRedisTemplate redis;
+
+    /** IT 与 dev 后端共享 dev Redis db6：清掉上次运行残留的 it-score 榜/队列，保证 rank 断言确定。 */
+    private void cleanItScoreRedis() {
+        redis.delete("lb:all:it-score");
+        redis.delete("lb:pending:it-score");
+        redis.delete("lb:p99:it-score");
+        Set<String> weekKeys = redis.keys("lb:week:it-score:*");
+        if (weekKeys != null && !weekKeys.isEmpty()) redis.delete(weekKeys);
+    }
+
     @Test
     void fullUploadPublishPlayPipeline() throws Exception {
         // 健康探针（Flyway 已迁移 + JPA validate 已过，能起上下文即结构正确）
@@ -173,7 +238,8 @@ class PlatformIT {
         MockMultipartFile file = new MockMultipartFile("file", "it-rush.zip",
                 "application/zip", zip);
 
-        String uploadResp = mvc.perform(multipart("/api/admin/packages").file(file))
+        String uploadResp = mvc.perform(multipart("/api/admin/packages").file(file)
+                .header("Authorization", adminAuth()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.slug").value("it-rush"))
                 .andExpect(jsonPath("$.version").value("1.0.0"))
@@ -184,7 +250,8 @@ class PlatformIT {
         // 轮询 Job → ready（消费组轮询 ~0.25s/次，30s 足够）
         String versionStatus = null;
         for (int i = 0; i < 60; i++) {
-            String st = mvc.perform(get("/api/admin/packages/" + packageId))
+            String st = mvc.perform(get("/api/admin/packages/" + packageId)
+                    .header("Authorization", adminAuth()))
                     .andExpect(status().isOk())
                     .andReturn().getResponse().getContentAsString();
             versionStatus = extractJsonField(st, "versionStatus");
@@ -194,12 +261,14 @@ class PlatformIT {
         assertEquals("ready", versionStatus, "Job 处理未完成或失败");
 
         // 发布（同游戏原 live → rolled_back）
-        mvc.perform(post("/api/admin/versions/" + versionId + "/publish"))
+        mvc.perform(post("/api/admin/versions/" + versionId + "/publish")
+                .header("Authorization", adminAuth()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.entryUrl").value("/game/g/it-rush/1.0.0/index.html"));
 
         // 上架
-        mvc.perform(post("/api/admin/games/it-rush/enable")).andExpect(status().isOk());
+        mvc.perform(post("/api/admin/games/it-rush/enable")
+                .header("Authorization", adminAuth())).andExpect(status().isOk());
 
         // 公开详情可见（builds 恒 web 一条 = N0 预留）
         mvc.perform(get("/api/games/it-rush"))
@@ -230,6 +299,17 @@ class PlatformIT {
                 .andExpect(status().isUnauthorized());
         mvc.perform(get("/api/me")).andExpect(status().isUnauthorized());
 
+        // ---- M2：RBAC（中心 §4.6 裁定 #21）：enforce-auth=true 下未登录 401；无权限点 403；管理员 200 ----
+        mvc.perform(get("/api/admin/games"))
+                .andExpect(status().isUnauthorized());
+        String userJwt = signTestJwt(UUID.randomUUID().toString(), "it-no-perm@example.com");
+        mvc.perform(get("/api/admin/games").header("Authorization", "Bearer " + userJwt))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
+        mvc.perform(get("/api/me/perm").header("Authorization", adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.perms").isArray());
+
         // ---- M2：榜单公开读（it-rush 刚发布，空榜 → 空 entries；登录态才有 myRank）----
         mvc.perform(get("/api/games/it-rush/leaderboard"))
                 .andExpect(status().isOk())
@@ -248,9 +328,11 @@ class PlatformIT {
      */
     @Test
     void m2ScoreChainWithSignedJwt() throws Exception {
+        cleanItScoreRedis();
         // ① 自包含游戏：it-score 1.0.0（score 0–999999 + 成就 FIRST_100 = score_gte 100）
         String uploadBody = mvc.perform(multipart("/api/admin/packages").file(new MockMultipartFile(
-                        "file", "it-score.zip", "application/zip", buildZip("it-score", "1.0.0", m2Manifest()))))
+                        "file", "it-score.zip", "application/zip", buildZip("it-score", "1.0.0", m2Manifest())))
+                .header("Authorization", adminAuth()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.slug").value("it-score"))
                 .andReturn().getResponse().getContentAsString();
@@ -258,19 +340,27 @@ class PlatformIT {
         long versionId = Long.parseLong(extractJsonField(uploadBody, "versionId"));
         String versionStatus = null;
         for (int i = 0; i < 60; i++) {
-            String st = mvc.perform(get("/api/admin/packages/" + packageId)).andReturn().getResponse().getContentAsString();
+            String st = mvc.perform(get("/api/admin/packages/" + packageId)
+                    .header("Authorization", adminAuth())).andReturn().getResponse().getContentAsString();
             versionStatus = extractJsonField(st, "versionStatus");
             if ("ready".equals(versionStatus) || "failed".equals(versionStatus)) break;
             Thread.sleep(500);
         }
         assertEquals("ready", versionStatus, "it-score Job 处理失败");
-        mvc.perform(post("/api/admin/versions/" + versionId + "/publish")).andExpect(status().isOk());
-        mvc.perform(post("/api/admin/games/it-score/enable")).andExpect(status().isOk());
+        mvc.perform(post("/api/admin/versions/" + versionId + "/publish")
+                .header("Authorization", adminAuth())).andExpect(status().isOk());
+        mvc.perform(post("/api/admin/games/it-score/enable")
+                .header("Authorization", adminAuth())).andExpect(status().isOk());
 
         // ② 签名中心 JWT（本地 JWKS 验签路径）
         String sub = UUID.randomUUID().toString();
         String jwt = signTestJwt(sub, "it-player@example.com");
         String auth = "Bearer " + jwt;
+
+        // RBAC：普通玩家 JWT（无权限点）访问管理台 → 403（后端硬校，01 文档 §5.3）
+        mvc.perform(get("/api/admin/games").header("Authorization", auth))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
 
         // ③ 提分：ok + rank=1 + 成就解锁 FIRST_100
         mvc.perform(post("/api/scores").header("Authorization", auth)
@@ -302,7 +392,7 @@ class PlatformIT {
         mvc.perform(get("/api/me/scores?gameSlug=it-score").header("Authorization", auth))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0]").doesNotExist());
-        jobProducer.publish(JobKinds.SCORE_SETTLE, "it-settle-1", Map.of());
+        jobProducer.publish(JobKinds.SCORE_SETTLE, "it-settle-" + System.currentTimeMillis(), Map.of());
         boolean settled = false;
         for (int i = 0; i < 30; i++) {
             String s = mvc.perform(get("/api/me/scores?gameSlug=it-score").header("Authorization", auth))

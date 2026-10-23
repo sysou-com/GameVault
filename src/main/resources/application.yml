@@ -46,11 +46,14 @@ gamevault:
   jwt:
     # sysou-manage 中心 JWKS（ES256/EC P-256）；M1 验签记日志不拦截，M2 启用拦截（01 文档 §7）
     jwks-url: ${GAMEVAULT_JWKS_URL:http://127.0.0.1:8093/manage/api/jwks}
-    issuer: ${GAMEVAULT_JWT_ISSUER:}    # 空 = 暂不校验 iss（M2：中心注册 gamevault 应用后填入）
+    issuer: ${GAMEVAULT_JWT_ISSUER:}    # 空 = 暂不校验 iss（M2：中心注册 gamevault 应用后填入 https://www.sysou.com/manage）
     key-ttl-min: 60
+    # 中心内部回环（§4.6 裁定 #21）：权限点回源 /manage/internal/perms（nginx 上 404，仅回环可达）
+    internal-token: ${GAMEVAULT_INTERNAL_TOKEN:}   # 与中心 MANAGE_INTERNAL_TOKENS 的 gamevault 项一致（0600 env，不进仓库）
+    perms-url: ${GAMEVAULT_PERMS_URL:http://127.0.0.1:8093/manage/internal/perms}
   admin:
-    # M1：管理台端点拦截未启用（01 文档 §11-4「M1 可先放行 + 记录」），仅记日志；
-    # M2 中心注册 gamevault 权限点后此开关随 M2 一并删除，改中心 RBAC 硬拦截。
+    # 管理台端点拦截：false = 只记日志不拦（M1/本地 dev 调试）；生产恒 true（01 文档 §5.3/§11-4）。
+    # 开启时 = 有效中心 JWT（未登录 401）+ 按端点硬校中心权限点（无权限点 403，回源 /manage/internal/perms）。
     enforce-auth: ${GAMEVAULT_ADMIN_ENFORCE_AUTH:false}
 
 logging:
