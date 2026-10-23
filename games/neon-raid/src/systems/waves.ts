@@ -68,7 +68,7 @@ export class WaveDirector {
   }
 
   private randY(): number {
-    const margin = 40
+    const margin = 56 // v1.1.0：实体放大后加大上下边距，防大精英出屏
     return margin + this.rng.next() * (this.h - margin * 2)
   }
 

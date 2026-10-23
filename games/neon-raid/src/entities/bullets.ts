@@ -85,9 +85,9 @@ export class BulletBank {
 }
 
 export function makePlayerBank(scene: Phaser.Scene): BulletBank {
-  return new BulletBank(scene, 'pbullet', GAME.playerBulletPool, 4)
+  return new BulletBank(scene, 'pbullet', GAME.playerBulletPool, 5)
 }
 
 export function makeEnemyBank(scene: Phaser.Scene): BulletBank {
-  return new BulletBank(scene, 'ebullet', GAME.enemyBulletPool, 6)
+  return new BulletBank(scene, 'ebullet', GAME.enemyBulletPool, 8)
 }

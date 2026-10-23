@@ -32,27 +32,27 @@ export class MenuScene extends Phaser.Scene {
     const bg = this.add.image(W / 2, H / 2, 'bg1').setAlpha(0.5)
     this.tweens.add({ targets: bg, alpha: 0.85, duration: 3000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' })
 
-    const title = this.add.text(W / 2, 84, 'NEON RAID', {
+    const title = this.add.text(W / 2, 76, 'NEON RAID', {
       font: 'bold 64px Arial', color: '#eafcff',
     }).setOrigin(0.5)
     title.setShadow(0, 0, '#ff2d95', 18, true, true)
-    this.add.text(W / 2, 132, '霓 虹 突 袭', {
+    this.add.text(W / 2, 124, '霓 虹 突 袭', {
       fontFamily: 'Arial', fontSize: '26px', color: '#12f0ff',
     }).setOrigin(0.5)
 
-    // 关卡选择
-    const levelY = 210
+    // 关卡选择（v1.1.0：tile 放大，触控目标 ≥48px）
+    const levelY = 190
     const levelLabels: Phaser.GameObjects.Text[] = []
     LEVELS.forEach((lv, i) => {
       const unlocked = i + 1 <= this.settings.unlockedLevel
       const label = this.add.text(
         W / 2 + (i - 1) * 260, levelY,
         `${lv.id}. ${lv.name}\n${lv.sub}${unlocked ? '' : '（未解锁）'}`,
-        { fontFamily: 'Arial', fontSize: '20px', color: unlocked ? '#eafcff' : '#3a4a66', align: 'center', lineSpacing: 8 },
+        { fontFamily: 'Arial', fontSize: '22px', color: unlocked ? '#eafcff' : '#3a4a66', align: 'center', lineSpacing: 8 },
       ).setOrigin(0.5)
       levelLabels.push(label)
       if (unlocked) {
-        this.add.zone(W / 2 + (i - 1) * 260, levelY + 18, 200, 70).setInteractive().on('pointerdown', () => {
+        this.add.zone(W / 2 + (i - 1) * 260, levelY + 16, 240, 84).setInteractive().on('pointerdown', () => {
           this.sel = i
           this.redrawLevels(levelLabels)
           this.startRun(i)
@@ -61,16 +61,24 @@ export class MenuScene extends Phaser.Scene {
     })
     this.btnTexts = levelLabels
 
-    // 设置区
+    // 开始按钮（v1.1.0：显式大按钮——不再只靠「点关卡」隐式开始；03 §1.3 触控可达）
+    const startRect = this.add.rectangle(W / 2, 330, 332, 88, 0x12f0ff, 0.25)
+    this.add.rectangle(W / 2, 330, 320, 76, 0x0a1428, 0.95).setStrokeStyle(3, 0x12f0ff)
+    this.add.text(W / 2, 322, '开 始 突 袭', { font: 'bold 30px Arial', color: '#eafcff' }).setOrigin(0.5)
+    this.startSub = this.add.text(W / 2, 352, `Level ${this.sel + 1} · ${LEVELS[this.sel].sub}`, { fontFamily: 'Arial', fontSize: '16px', color: '#7fd7ff' }).setOrigin(0.5)
+    startRect.setInteractive()
+    startRect.on('pointerdown', () => this.startRun(this.sel))
+
+    // 设置区（v1.1.0：下移避让开始按钮）
     const s = this.settings
-    const volLabel = this.add.text(W / 2 - 320, 330, `音量 ${Math.round(s.volume * 100)}%`, {
+    const volLabel = this.add.text(W / 2 - 320, 380, `音量 ${Math.round(s.volume * 100)}%`, {
       fontFamily: 'Arial', fontSize: '18px', color: '#7fd7ff',
     })
-    this.add.text(W / 2 - 320, 356, `[↑/↓ 或 点击]`, { fontFamily: 'Arial', fontSize: '12px', color: '#3a5a86' }).setInteractive()
-    const shakeLabel = this.add.text(W / 2 - 320, 392, `震屏 ${s.shake ? '开' : '关'}`, {
+    this.add.text(W / 2 - 320, 406, `[↑/↓ 或 点击]`, { fontFamily: 'Arial', fontSize: '13px', color: '#3a5a86' }).setInteractive()
+    const shakeLabel = this.add.text(W / 2 - 320, 434, `震屏 ${s.shake ? '开' : '关'}`, {
       fontFamily: 'Arial', fontSize: '18px', color: '#7fd7ff',
     })
-    this.add.zone(W / 2 - 320, 392, 140, 30).setInteractive().on('pointerdown', () => {
+    this.add.zone(W / 2 - 320, 434, 140, 34).setInteractive().on('pointerdown', () => {
       s.shake = !s.shake
       saveSettings(s)
       shakeLabel.setText(`震屏 ${s.shake ? '开' : '关'}`)
@@ -82,18 +90,18 @@ export class MenuScene extends Phaser.Scene {
     const loginText = logged
       ? `已登录：${user?.name || user?.id || '玩家'}（成绩上榜单）`
       : '游客模式：登录平台后成绩才能上榜单'
-    this.add.text(W / 2 - 320, 430, loginText, {
+    this.add.text(W / 2 - 320, 486, loginText, {
       fontFamily: 'Arial', fontSize: '15px', color: logged ? '#3dff8f' : '#ffd23d',
     })
 
-    this.add.text(W / 2, 496, `最高纪录 ${this.settings.bestScore}    ——    [→←] 选关  [Enter / 点击] 开始`, {
+    this.add.text(W / 2, 508, `最高纪录 ${this.settings.bestScore}    ——    [→←] 选关  [Enter / 点击「开始」] 开始`, {
       fontFamily: 'Arial', fontSize: '16px', color: '#5a7aa6',
     }).setOrigin(0.5, 0)
 
     // 键盘
     const kb = this.input.keyboard!
-    kb.on('keydown-LEFT', () => { this.sel = (this.sel + LEVELS.length - 1) % LEVELS.length; this.redrawLevels(levelLabels) })
-    kb.on('keydown-RIGHT', () => { this.sel = (this.sel + 1) % LEVELS.length; this.redrawLevels(levelLabels) })
+    kb.on('keydown-LEFT', () => { this.sel = (this.sel + LEVELS.length - 1) % LEVELS.length; this.redrawLevels(levelLabels); this.refreshStart() })
+    kb.on('keydown-RIGHT', () => { this.sel = (this.sel + 1) % LEVELS.length; this.redrawLevels(levelLabels); this.refreshStart() })
     kb.on('keydown-UP', () => {
       s.volume = Math.min(1, s.volume + 0.1)
       audio.setVolume(s.volume)
@@ -114,14 +122,20 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private selBox: Phaser.GameObjects.Graphics | null = null
+  private startSub: Phaser.GameObjects.Text | null = null
+
+  /** 开始按钮副标题跟随选中关（选关后点「开始」进的是选中的关） */
+  private refreshStart(): void {
+    this.startSub?.setText(`Level ${this.sel + 1} · ${LEVELS[this.sel].sub}`)
+  }
 
   private refreshSelBox(labels: Phaser.GameObjects.Text[]): void {
     this.selBox?.destroy()
     const t = labels[this.sel]
     if (!t) return
     this.selBox = this.add.graphics()
-    this.selBox.lineStyle(2, 0x12f0ff, 0.9)
-    this.selBox.strokeRect(t.x - 110, t.y - 42, 220, 84)
+    this.selBox.lineStyle(2.5, 0x12f0ff, 0.9)
+    this.selBox.strokeRect(t.x - 125, t.y - 46, 250, 92)
   }
 
   private redrawLabels: Phaser.GameObjects.Text[] | null = null

@@ -1,15 +1,15 @@
 {
   "schema": "gamevault/manifest@1",
   "game": "neon-raid",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "title": "霓虹突袭",
   "engine": "phaser-4",
   "language": "typescript",
   "entry": "index.html",
   "cover": "cover.svg",
   "size": {
-    "totalBytes": 1731390,
-    "initialLoadBytes": 1731390,
+    "totalBytes": 1732993,
+    "initialLoadBytes": 1732993,
     "maxAssetBytes": 200000000
   },
   "viewport": {

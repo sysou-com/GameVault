@@ -33,7 +33,7 @@ export class ResultScene extends Phaser.Scene {
     this.tweens.add({ targets: bg, alpha: 0.8, duration: 4000, yoyo: true, repeat: -1 })
 
     this.add.text(W / 2, 64, this.died ? 'SHIP DESTROYED' : this.run.levelsCleared === 3 ? 'MISSION COMPLETE' : 'TIME UP', {
-      font: 'bold 40px Arial',
+      font: 'bold 44px Arial',
       color: this.died ? '#ff2d95' : '#3dff8f',
     }).setOrigin(0.5).setShadow(0, 0, this.died ? '#ff2d95' : '#3dff8f', 16, true, true)
 
@@ -45,20 +45,20 @@ export class ResultScene extends Phaser.Scene {
       ['通关', `${this.run.levelsCleared}/3 关`],
     ]
     rows.forEach(([k, v], i) => {
-      this.add.text(W / 2 - 120, 130 + i * 40, k, { fontFamily: 'Arial', fontSize: '18px', color: '#7fd7ff' })
-      this.add.text(W / 2 + 160, 130 + i * 40, v, { font: 'bold 20px Arial', color: '#eafcff' }).setOrigin(1, 0)
+      this.add.text(W / 2 - 120, 130 + i * 42, k, { fontFamily: 'Arial', fontSize: '20px', color: '#7fd7ff' })
+      this.add.text(W / 2 + 160, 130 + i * 42, v, { font: 'bold 22px Arial', color: '#eafcff' }).setOrigin(1, 0)
     })
 
     const s = loadSettings()
-    this.add.text(W / 2, 340, `历史最佳 ${s.bestScore}`, { fontFamily: 'Arial', fontSize: '16px', color: '#ffd23d' }).setOrigin(0.5)
+    this.add.text(W / 2, 348, `历史最佳 ${s.bestScore}`, { fontFamily: 'Arial', fontSize: '18px', color: '#ffd23d' }).setOrigin(0.5)
 
     // 提交状态
-    this.statusText = this.add.text(W / 2, 380, this.getInitialStatus(), {
-      fontFamily: 'Arial', fontSize: '16px', color: '#7fd7ff', align: 'center',
+    this.statusText = this.add.text(W / 2, 388, this.getInitialStatus(), {
+      fontFamily: 'Arial', fontSize: '18px', color: '#7fd7ff', align: 'center',
     }).setOrigin(0.5)
 
-    // 按钮（登录时 3 枚，间距 210 > 170 宽不重叠）
-    this.makeBtn(W / 2 - 210, 440, '再来一局', () => {
+    // 按钮（v1.1.0：放大到触控目标 ≥48px；登录时 3 枚，间距 210 > 200 宽不重叠）
+    this.makeBtn(W / 2 - 210, 452, '再来一局', () => {
       const run = newRun(0)
       const seed = freshSeed()
       audio.stopBgm()
@@ -66,11 +66,11 @@ export class ResultScene extends Phaser.Scene {
       sendTrack('start')
       this.scene.start('play', { run, seed })
     })
-    this.makeBtn(W / 2 + 210, 440, '返回菜单', () => {
+    this.makeBtn(W / 2 + 210, 452, '返回菜单', () => {
       this.scene.start('menu')
     })
     if (getJwt()) {
-      this.makeBtn(W / 2, 440, '提交分数', () => this.doSubmit())
+      this.makeBtn(W / 2, 452, '提交分数', () => this.doSubmit())
     }
 
     this.input.keyboard!.on('keydown-ENTER', () => {
@@ -83,9 +83,12 @@ export class ResultScene extends Phaser.Scene {
     })
   }
 
+  /** 按钮（v1.1.0：放大到触控目标 ≥48px；登录时 3 枚，间距 210 > 200 宽不重叠。
+   *  v4 容器子件坐标是局部坐标：子件从 (0,0) 创建，位置由容器携带——原实现 (x,y)+(x,y) 双重叠加
+   *  把按钮顶到屏幕外（2026-10-23 生产用户反馈「框内点不动」根因）） */
   private makeBtn(x: number, y: number, label: string, fn: () => void): Phaser.GameObjects.Container {
-    const rect = this.add.rectangle(x, y, 170, 44, 0x0a1428, 0.9).setStrokeStyle(2, 0x12f0ff)
-    const t = this.add.text(x, y, label, { fontFamily: 'Arial', fontSize: '17px', color: '#eafcff' }).setOrigin(0.5)
+    const rect = this.add.rectangle(0, 0, 200, 56, 0x0a1428, 0.95).setStrokeStyle(2.5, 0x12f0ff)
+    const t = this.add.text(0, 0, label, { fontFamily: 'Arial', fontSize: '20px', color: '#eafcff' }).setOrigin(0.5)
     const c = this.add.container(x, y, [rect, t])
     rect.setInteractive()
     rect.on('pointerdown', fn)

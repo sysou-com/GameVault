@@ -120,7 +120,7 @@ class DiverUnit {
     if (this.cdMs <= 0) {
       this.cdMs = ENEMIES.diver.shootIntervalMs[0] + (this.cdMs % 900) + 900
       // 单发直射（角度 = 指向玩家）
-      ctx.emit(Math.atan2(ctx.playerY - this.y, ctx.playerX - this.x), this.bulletSpeed * ctx.bulletSpeedScale, this.x - 16, this.y)
+      ctx.emit(Math.atan2(ctx.playerY - this.y, ctx.playerX - this.x), this.bulletSpeed * ctx.bulletSpeedScale, this.x - 28, this.y)
     }
     return null
   }
@@ -169,7 +169,7 @@ class BomberUnit {
       this.cdMs = ENEMIES.bomber.shootIntervalMs[0]
       // 3 向扇形朝左
       for (const off of [-0.22, 0, 0.22]) {
-        ctx.emit(Math.PI + off, this.bulletSpeed * ctx.bulletSpeedScale, this.x - 20, this.y)
+        ctx.emit(Math.PI + off, this.bulletSpeed * ctx.bulletSpeedScale, this.x - 32, this.y)
       }
     }
     return null
@@ -248,8 +248,8 @@ export class EliteUnit {
 
     // 血条
     this.bar.clear()
-    const bw = 96
-    const by = this.y - this.h / 2 - 16
+    const bw = this.w
+    const by = this.y - this.h / 2 - 18
     this.bar.fillStyle(0x0a1428, 1).fillRect(this.x - bw / 2, by, bw, 6)
     const r = Math.max(0, this.hp / this.maxHp)
     this.bar.fillStyle(r > 0.5 ? 0x3dff8f : r > 0.25 ? 0xffd23d : 0xff2d95, 1)

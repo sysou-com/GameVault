@@ -1,6 +1,9 @@
 /**
  * 数值表（03 文档 §1/§2.3：数据驱动，策划改数值不改逻辑）。
  * 设计基准 960×540（16:9，manifest.viewport.base）。
+ *
+ * v1.1.0（2026-10-23 用户反馈「游戏元素太小」）：实体尺寸统一 ×1.4（AS）。
+ * 玩家判定框比视觉小一圈（宽容度）；敌人/子弹/拾取物视觉=判定。
  */
 
 export const W = 960
@@ -17,7 +20,7 @@ export interface PlayerDef {
   shieldTimeMs: number     // 护盾持续时间
 }
 export const PLAYER: PlayerDef = {
-  w: 46, h: 30, speed: 430, fireIntervalMs: 130, bulletSpeed: 900, shieldTimeMs: 8000,
+  w: 56, h: 34, speed: 430, fireIntervalMs: 130, bulletSpeed: 900, shieldTimeMs: 8000,
 }
 
 export interface EnemyDef {
@@ -33,9 +36,9 @@ export interface EnemyDef {
   contactDamage: number
 }
 export const ENEMIES: Record<EnemyDef['key'], EnemyDef> = {
-  grunt:  { key: 'grunt',  w: 34, h: 22, hp: 1, score: 100, speed: 200, spawnX: W + 40, canShoot: false, shootIntervalMs: [0, 0], bulletSpeed: 0,   contactDamage: 1 },
-  diver:  { key: 'diver',  w: 36, h: 26, hp: 2, score: 300, speed: 165, spawnX: W + 40, canShoot: true,  shootIntervalMs: [1400, 2600], bulletSpeed: 260, contactDamage: 1 },
-  bomber: { key: 'bomber', w: 44, h: 34, hp: 4, score: 300, speed: 105, spawnX: W + 40, canShoot: true,  shootIntervalMs: [2600, 2600], bulletSpeed: 230, contactDamage: 1 },
+  grunt:  { key: 'grunt',  w: 48, h: 31, hp: 1, score: 100, speed: 200, spawnX: W + 40, canShoot: false, shootIntervalMs: [0, 0], bulletSpeed: 0,   contactDamage: 1 },
+  diver:  { key: 'diver',  w: 50, h: 36, hp: 2, score: 300, speed: 165, spawnX: W + 40, canShoot: true,  shootIntervalMs: [1400, 2600], bulletSpeed: 260, contactDamage: 1 },
+  bomber: { key: 'bomber', w: 62, h: 48, hp: 4, score: 300, speed: 105, spawnX: W + 40, canShoot: true,  shootIntervalMs: [2600, 2600], bulletSpeed: 230, contactDamage: 1 },
 }
 
 export interface EliteDef {
@@ -58,7 +61,7 @@ export interface ElitePattern {
 }
 export const ELITES: Record<EliteDef['key'], EliteDef> = {
   warden: {
-    key: 'warden', w: 96, h: 64, hp: 30, phaseScore: 1000, killScore: 5000, speed: 55,
+    key: 'warden', w: 134, h: 90, hp: 30, phaseScore: 1000, killScore: 5000, speed: 55,
     patterns: [
       { name: 'P1', kind: 'spread3', intervalMs: 1100, bulletSpeed: 240, bullets: 3, spreadRad: 0.9, aimed: false },
       { name: 'P2', kind: 'aimed3',  intervalMs: 1300, bulletSpeed: 300, bullets: 3, spreadRad: 0.22, aimed: true },
@@ -66,7 +69,7 @@ export const ELITES: Record<EliteDef['key'], EliteDef> = {
     ],
   },
   guardian: {
-    key: 'guardian', w: 112, h: 76, hp: 40, phaseScore: 1000, killScore: 5000, speed: 48,
+    key: 'guardian', w: 157, h: 106, hp: 40, phaseScore: 1000, killScore: 5000, speed: 48,
     patterns: [
       { name: 'P1', kind: 'fan5', intervalMs: 950, bulletSpeed: 260, bullets: 5, spreadRad: 1.1, aimed: false },
       { name: 'P2', kind: 'doubleSpread5', intervalMs: 1500, bulletSpeed: 235, bullets: 5, spreadRad: 0.7, aimed: false },

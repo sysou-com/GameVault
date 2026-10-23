@@ -16,6 +16,8 @@ import { PickupPool, PICKUP_KEYS } from '../entities/pickups.ts'
 import { audio } from '../audio/synth.ts'
 import { loadSettings, saveSettings, type Settings } from '../core/settings.ts'
 import { sendTrack, getJwt } from '../platform/bridge.ts'
+import { newRun } from '../core/run.ts'
+import { freshSeed } from '../core/rng.ts'
 
 export class PlayScene extends Phaser.Scene {
   private run!: RunState
@@ -108,27 +110,48 @@ export class PlayScene extends Phaser.Scene {
     }).setOrigin(0.5).setVisible(false)
     this.tweens.add({ targets: this.warnText, alpha: 0.4, duration: 400, yoyo: true, repeat: -1 })
 
-    // HUD
-    const scoreT = this.add.text(16, 12, 'SCORE 0', { fontFamily: 'Arial', font: 'bold 20px Arial', color: '#eafcff' })
-    const comboT = this.add.text(16, 40, '', { fontFamily: 'Arial', fontSize: '16px', color: '#ffd23d' })
-    const waveT = this.add.text(W - 16, 12, '', { fontFamily: 'Arial', fontSize: '16px', color: '#7fd7ff' }).setOrigin(1, 0)
+    // HUD（v1.1.0：字号放大，移动端可读）
+    const scoreT = this.add.text(16, 12, 'SCORE 0', { fontFamily: 'Arial', font: 'bold 24px Arial', color: '#eafcff' })
+    const comboT = this.add.text(16, 44, '', { fontFamily: 'Arial', fontSize: '20px', color: '#ffd23d' })
+    const waveT = this.add.text(W - 16, 12, '', { fontFamily: 'Arial', fontSize: '18px', color: '#7fd7ff' }).setOrigin(1, 0)
     const timeBar = this.add.graphics()
-    const hint = this.add.text(W - 16, 36, this.level === 2 && this.settings.shake ? '⚡ 静电干扰中' : '', {
-      fontFamily: 'Arial', fontSize: '14px', color: '#b26bff',
+    const hint = this.add.text(W - 16, 38, this.level === 2 && this.settings.shake ? '⚡ 静电干扰中' : '', {
+      fontFamily: 'Arial', fontSize: '16px', color: '#b26bff',
     }).setOrigin(1, 0)
     this.hud = { score: scoreT, combo: comboT, wave: waveT, timeBar, hint }
 
-    this.add.text(16, H - 30, '[P/Esc] 暂停    [W/S 或 鼠标] 移动    自动开火', {
-      fontFamily: 'Arial', fontSize: '12px', color: '#3a5a86',
+    this.add.text(16, H - 30, this.isTouch() ? '[触控：拖拽左半屏移动] 自动开火  [右上 ⏸ 暂停]' : '[P/Esc] 暂停    [W/S 或 鼠标] 移动    自动开火', {
+      fontFamily: 'Arial', fontSize: '14px', color: '#3a5a86',
     })
 
-    // 暂停层
+    // 触控暂停按钮（右上，触控目标 ≥48px；02 §8 移动端清单）
+    if (this.isTouch()) {
+      const pz = this.add.zone(W - 48, 48, 56, 56).setInteractive()
+      this.add.text(W - 48, 48, '⏸', { font: 'bold 28px Arial', color: '#7fd7ff' }).setOrigin(0.5).setDepth(10)
+      pz.on('pointerdown', () => this.togglePause())
+    }
+
+    // 暂停层（v1.1.0：加「继续/重开/菜单」大按钮——框内可重开，不再依赖平台框外「重新开始」）
     this.pauseLayer = this.add.container(0, 0)
     const pbg = this.add.rectangle(W / 2, H / 2, W, H, 0x02040c, 0.72)
-    const ptext = this.add.text(W / 2, H / 2, 'PAUSED\n[P/Esc] 继续', {
-      fontFamily: 'Arial', fontSize: '30px', color: '#eafcff', align: 'center', lineSpacing: 14,
+    const ptext = this.add.text(W / 2, H / 2 - 80, 'PAUSED', {
+      fontFamily: 'Arial', fontSize: '36px', color: '#eafcff', align: 'center', lineSpacing: 14,
     }).setOrigin(0.5)
-    this.pauseLayer.add([pbg, ptext]).setVisible(false)
+    this.pauseLayer.add([pbg, ptext])
+    this.pauseLayer.add(this.pauseBtn(W / 2, H / 2 - 6, '继续', () => this.togglePause()))
+    this.pauseLayer.add(this.pauseBtn(W / 2, H / 2 + 66, '重开本局', () => {
+      this.togglePause()
+      audio.stopBgm()
+      audio.startBgm(0)
+      const run = newRun(0)
+      const seed = freshSeed()
+      this.scene.start('play', { run, seed })
+    }))
+    this.pauseLayer.add(this.pauseBtn(W / 2, H / 2 + 138, '返回菜单', () => {
+      audio.stopBgm()
+      this.scene.start('menu')
+    }))
+    this.pauseLayer.setVisible(false)
 
     // 输入
     const kb = this.input.keyboard!
@@ -301,7 +324,7 @@ export class PlayScene extends Phaser.Scene {
     this.fireCdMs = PLAYER.fireIntervalMs
     const offsets = n === 1 ? [0] : n === 2 ? [-6, 6] : n === 3 ? [-12, 0, 12] : [-15, -5, 5, 15]
     for (const off of offsets) {
-      this.pBullets.spawn(this.player.x + 22, this.player.y + off, PLAYER.bulletSpeed, 0)
+      this.pBullets.spawn(this.player.x + 34, this.player.y + off, PLAYER.bulletSpeed, 0)
     }
     audio.sfx('shoot')
   }
@@ -322,7 +345,7 @@ export class PlayScene extends Phaser.Scene {
     for (const b of [...this.pBullets.activeBullets]) {
       for (const u of this.units) {
         if (!u.alive) continue
-        if (this.bulletHitsUnit(b, 14, 5, u)) {
+        if (this.bulletHitsUnit(b, 20, 7, u)) {
           this.pBullets.kill(b)
           const dead = u.onHit(1)
           this.spawnHitSpark(b.x, b.y)
@@ -336,7 +359,7 @@ export class PlayScene extends Phaser.Scene {
     if (!invincible) {
       // 敌方子弹 vs 玩家
       for (const b of [...this.eBullets.activeBullets]) {
-        if (this.bulletHitsUnit(b, 12, 12, { x: px, y: py, w: PLAYER.w, h: PLAYER.h })) {
+        if (this.bulletHitsUnit(b, 17, 17, { x: px, y: py, w: PLAYER.w, h: PLAYER.h })) {
           this.eBullets.kill(b)
           this.damagePlayer()
           break
@@ -479,6 +502,17 @@ export class PlayScene extends Phaser.Scene {
     this.pauseLayer.setVisible(this.paused)
     if (this.paused) audio.stopBgm()
     else audio.startBgm(this.run.levelIdx)
+  }
+
+  /** 暂停层按钮（触控目标 ≥48px；容器子件局部坐标从 (0,0) 起——v4 容器子件 x/y 是局部坐标，
+   *  若与容器同坐标创建会双重叠加飞出屏幕（2026-10-23 生产用户反馈「框内点不动」根因，同款 ResultScene.makeBtn 已修） */
+  private pauseBtn(x: number, y: number, label: string, fn: () => void): Phaser.GameObjects.Container {
+    const rect = this.add.rectangle(0, 0, 240, 56, 0x0a1428, 0.95).setStrokeStyle(2, 0x12f0ff)
+    const t = this.add.text(0, 0, label, { fontFamily: 'Arial', fontSize: '22px', color: '#eafcff' }).setOrigin(0.5)
+    const c = this.add.container(x, y, [rect, t])
+    rect.setInteractive()
+    rect.on('pointerdown', fn)
+    return c
   }
 
   // ---------- 视觉 ----------
