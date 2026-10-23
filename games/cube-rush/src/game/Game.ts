@@ -114,7 +114,8 @@ export class Game {
         }
         if (steps === MAX_CATCHUP_STEPS) this.acc = 0 // 丢弃余量（防螺旋死亡）
       }
-      this.renderer.render(this.scene, this.camera)
+      // 0 尺寸不 render（iframe 布局未定瞬时）——防 WebGPU「swapchain texture of size 0」。
+      if (this.canvas.width > 0 && this.canvas.height > 0) this.renderer.render(this.scene, this.camera)
     }
     this.raf = requestAnimationFrame(frame)
   }
@@ -334,6 +335,7 @@ export class Game {
   }
 
   resize(w: number, h: number): void {
+    if (w <= 0 || h <= 0) return // 防 0 尺寸（iframe 布局未定瞬时）
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(w, h, false)

@@ -189,6 +189,9 @@ async function main(): Promise<void> {
   function resize(): void {
     const w = window.innerWidth
     const h = window.innerHeight
+    // iframe 布局未定（瞬时 0 尺寸）时不写入 0——WebGPURenderer 对 0 尺寸 swapchain 会抛
+    // 「Could not create a swapchain texture of size 0」GPUValidationError（r186 实机复现）。
+    if (w <= 0 || h <= 0) return
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     canvas.width = Math.floor(w * dpr)
     canvas.height = Math.floor(h * dpr)
@@ -197,6 +200,8 @@ async function main(): Promise<void> {
     game.resize(canvas.width, canvas.height)
   }
   window.addEventListener('resize', resize)
+  // ResizeObserver：可靠捕获 iframe 0→确定尺寸的布局过渡（resize 事件在 iframe 里可能不触发）。
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resize).observe(document.body)
   resize()
 
   // 启动
