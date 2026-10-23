@@ -92,6 +92,9 @@
 - **近失擦过**：通过障碍时最近距离 < 0.35m 且未碰撞 → +200×倍率 + 「CLOSE!」飘字 +
   0.05s 顿帧 + 镜头轻微 zoom。奖励风险：同一障碍，越贴越高分（好 runner 的标准件）。
 - HUD：左上 = 距离/得分；顶部中 = combo 条（×N + 衰减进度条）；飘字 = CLOSE! / FLOW / FLOW PERFECT。
+- **道具协同（2026-10-23 调研吸收，§3.6 Cube-Field+）**：两种道具同时生效 = 协同效果：
+  ×2 + 磁力 = 「黄金风暴」（磁力吸到的金币按 ×2 计）；护盾 + Boost = 「铁壁火箭」（Boost 2s 内受击不中断，每局 1 次）；
+  协同触发 = 专属飘字 + SFX（满足 00 §3.4「优」自检 #2：道具连携出倍率）。
 
 ### 1.5 节拍生成系统（2026-10-23 新增，本游戏核心「奇」点，用户 2026-10-23 暂准，实际效果演示后再最终确认）
 
@@ -107,10 +110,11 @@
 
 **模式**：`街机`（默认：节奏门 600m 后出现，约每 400m 一扇）/ `Rhythm Rush`（v1.1：门占比 40%，独立榜，meta.mode=rhythm）。
 
-**为什么是「奇」**（00 §3.4）：主流 runner 的关卡手设或纯随机，**「关卡数据与正在播放的 BGM 节拍时间线
-同源」在主流中不存在**（2026-10-23 调研：同类新奇案例 = AVOID 90° 世界旋转 / Rule Runner 规则突变 / Run Into Puzzle
-跑酷×解谜，均无音乐生成关卡）；且它是本平台零资产/合成 BGM 技术路线的自然延伸（beatmap = 关卡数据），
-技术拆解页 P5 的核心叙事素材。
+**为什么是「奇」**（00 §3.4；2026-10-23 按奇点发现方法复核，来源全表见 §3.6）：
+「关卡数据与 BGM 节拍时间线同源」在**主流 runner（Subway Surfers/Temple Run 系）中不存在**；现有案例全部是
+小众实验（itch 免费游戏 ByteBeat = 玩家自带音频 / RobotzZz 制作中 / 浏览器玩具 Music Racer，§3.6）——
+它们都不是「主流深度 runner（3 车道 + 道具 + 榜单生态）× 零资产合成音乐闭环 × 平台榜单+幽灵竞速」。
+它是本平台零资产/合成 BGM 技术路线的自然延伸（beatmap = 关卡数据），技术拆解页 P5 的核心叙事素材。
 
 **工程**：节拍表 = 纯数据表；Δt 判定纯函数（可单测，边界表形状同 reflex-rush `judge.ts`）；
 低端机（quality=low）节奏门**自动降级为「只通过不判定」**（不产生不公平）。
@@ -204,7 +208,45 @@ games/cube-rush/
   （音效/粒子/顿帧/闪白/击退/屏震/数字）；反馈必须**短促夸张**、按事件量级缩放 → https://www.youtube.com/watch?v=216_5nu4aVQ（2026-10-23）
 - 2024–2025 同类新奇案例（「奇」差异化核对）：AVOID（第一人称 + 90° 世界旋转，2024-06 Steam 发售）/
   Rule Runner（规则突变）/ Run Into Puzzle（跑酷 × 解谜）——**均无「以正在播放的 BGM 节拍时间线生成关卡」
-  ⇒ 本游戏节奏系统（§1.5）不与其重叠**（2026-10-23 web_search 调研）。
+  ⇒ 本游戏节奏系统（§1.5）与它们差异化见 §3.6**（2026-10-23 web_search 调研，首轮奇点发现方法实践）。
+
+### 3.6 奇点交叉验证与吸收（2026-10-23，按 00 §3.4 奇点发现方法：口碑高 + 新奇 + 未火）
+
+**节奏 runner 小众案例（奇点重叠核查）**：
+- **ByteBeat sandland**（itch.io 免费，Magnaccioni）：「turn any audio file into a playable level」——分析玩家上传的
+  音乐生成同步障碍，双车道沙漠 + final boss；另有「generate synthesized music and play」模式
+  → https://magnaccioni.itch.io/bytebeat（2026-10-23）
+- **RobotzZz – Infinite Rhythm Runner**（Steam 页面，制作中）：「The Music Doesn't Play in the Background,
+  It Builds the World Around You… every beat shapes the world ahead」→ https://www.flatvoxel.com/robotzzz/（2026-10-23）
+- **Music Racer**（浏览器端，Babylon.js）：MP3 → 浏览器内分析 → 可玩的 neon runner 关卡
+  → https://scriptinghobby.com/music-racer/（2026-10-23）
+- **Geima: Cadence**（itch.io，Godot）：「the world itself is your timeline」，按节拍正确应对危险充能开门
+  → https://github.com/juan-medina/geima-cadence（2026-10-23）
+
+**结论（奇点定位修正）**：「音乐生成关卡」有先例但全是**小众实验**（免费游戏/demo/浏览器玩具），均未火。
+它们没火的原因（通用教训）：① 无生态（无榜单/无进度/无社交）② 操作过简（双车道/单车道跳躲）
+③ 多数要求玩家自带音乐。⇒ 本游戏奇点 = **主流 runner 深度（3 车道 + 5 道具 + 榜单）× 零资产合成音乐
+（音乐与关卡同源，无资产、无需自带）× 平台生态（节奏榜/幽灵竞速/WebGPU 橱窗）**——三条恰是小众案例的
+三个短板。奇点结论维持（已暂准），§1.5 补「与小众案例的差异化」。
+
+**新奇 runner 案例（「优」吸收）**：
+- **Cube-Field+**（Steam 2025-06-12，12 评 100% Positive）：3D 方块 runner + **增量道具协同**（items & synergies）
+  → 吸收：道具协同（§1.4）；https://store.steampowered.com/app/2734180/CubeField/（2026-10-23）
+- **Shidunzi Parkour 石墩跑酷**（Steam 2025-08-28，37 评 97% Positive）：「有自我意识的石墩」无尽跑——
+  奇点 = 角色人格/主题本身（没火原因：梗属性太强、内容难扩展）→ 吸收：v1.1 角色三件套起名 + 人格（§6）
+  https://store.steampowered.com/app/3943400/Shidunzi_Parkour/（2026-10-23）
+- **Haste**（Steam 2025-04-01，9,131 评 93% Very Positive，Landfall）：火的标杆——**落地质量**是核心手感
+  （master your landings）+ 程序化世界 + co-op → 吸收：落地反馈强化（squash/尘土，§1.3 既有，验收加手感项）；
+  co-op 不适用（本平台 M5 是 1v1）；https://store.steampowered.com/app/1796470/Haste/（2026-10-23）
+- **AVOID**（Steam 2024-06，bullet-hell runner + 90° 旋转重力）：参考 = **态度化呈现**（开场怼脸「no player skills
+detected」）⇒ 本游戏「关卡即音乐」也要有态度：加载屏/开场 = 「本局关卡正在被音乐生成中」演出
+  https://www.dualshockers.com/best-endless-runner-games/（2026-10-23）
+- Steam Next Fest 2025-06 跑酷新案例：Motorslice（Mirror's Edge × 波斯王子电锯跑酷，极简移动手感口碑）/
+  Midnight Horde（跑酷 × Vampire Survivors 反向弹幕 + 建城堡）/ Bloodthief（血 = 速度燃料的资源循环）
+  → 参考：移动手感打磨、资源-燃料循环（2026-10-23，dualshockers/gamesradar/gamespress 报道）
+
+**策略确认**：Haste/Motorslice 火 = 扎实核心循环 + 手感 + 打磨；奇点实验没火 = 缺生态与打磨。
+⇒ 本游戏「优包（W3）+ 一个清晰的奇点（W4）」组合正确：**不堆奇点，先把 runner 本体做到「不廉价」**。
 
 ---
 
@@ -247,7 +289,8 @@ games/cube-rush/
    - 为什么是「奇」：同轨幽灵竞速是竞速品类标准件、**runner 品类罕见**，且由本平台三件既有能力
      （排行榜 + 云存档 + 确定性轨道）**原生拼出**——别家平台抄不走。
 2. **角色三件套（成就解锁）**：① 冲刺立方（Shift/双触 0.4s 冲刺，每局 2 次）② 相位立方（每局可穿过一次低激光栏 +
-   滑铲时长 +50%）③ 磁力立方（开局 5s 自动磁力）；每角色独立配色/纹样（emissive 图案）/光轨色；菜单加角色选择。
+   滑铲时长 +50%）③ 磁力立方（开局 5s 自动磁力）；每角色独立配色/纹样（emissive 图案）/光轨色，**有名有性格**
+  （2026-10-23 调研吸收，§3.6 Shidunzi Parkour：角色人格 = 低成本奇点）；菜单加角色选择。
 3. **时间冲刺模式**：3 分钟内距离排名（原 §1.1 设计），复用引擎 + 同一导演，独立榜单。
 4. **波形图案表**：纯权重表 → 10 种图案（之字/锯走廊/激光雨/金币拱/检查点冲刺……），
    30s「紧张–放松」循环（30s 密集 → 15s 放松 + 必出能量门）。
