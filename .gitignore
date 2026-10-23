@@ -42,3 +42,4 @@ admin.jwt
 prod-*.json
 dev-upload.json
 dev-pkg.json
+.pi-release/

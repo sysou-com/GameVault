@@ -1,9 +1,9 @@
-# HANDOFF — 会话交接（2026-10-23，M1+M2+游戏 A 生产均已上线；移动端适配已部署；游戏 B「方块狂奔」核心+生产上线，**W3「优」视觉包 + W4「奇」节拍系统 2026-10-23 完成**（待发布新版本）；用户试玩反馈 →「优/奇」标准文档修订）
+# HANDOFF — 会话交接（2026-10-23，M1+M2+游戏 A 生产均已上线；移动端适配已部署；游戏 B「方块狂奔」**v1.1.0（W3「优」视觉包 + W4「奇」节拍系统）2026-10-23 生产上线**；用户试玩反馈 →「优/奇」标准文档修订）
 
 > 新会话开场协议：先 `git fetch origin && git status -sb` 同步 → 读 `CLAUDE.md`（红线+入口）→
 > 读本文件（当前状态）→ 按任务读 `docs/design/` 对应章节。**冲突优先级：用户裁定 > docs/design > 本文件 > 代码现状。**
 
-## 一、当前状态（M1 ✅ 上线；M2 ✅ 生产上线；游戏 A「霓虹突袭」✅ 2026-10-23 生产上线；移动端适配 ✅ 已部署；游戏 B「方块狂奔」✅ 2026-10-23 核心完成+生产上线 + **W3「优」视觉包 + W4「奇」节拍系统完成（v1.1.0，本地全绿+浏览器验收，待打包发布新版本）**）
+## 一、当前状态（M1 ✅ 上线；M2 ✅ 生产上线；游戏 A「霓虹突袭」✅ 2026-10-23 生产上线；移动端适配 ✅ 已部署；游戏 B「方块狂奔」✅ **v1.1.0（W3「优」视觉包 + W4「奇」节拍系统）2026-10-23 生产上线**）
 
 **生产已跑通**（https://sysou.com/game/ → 308 → www.sysou.com/game/，M1 状态）：
 - 后端 `gamevault.service`（systemd，`/opt/java21/current` JVM，127.0.0.1:8094，PG 生产库 `gamevault`，Redis db4）
@@ -104,7 +104,9 @@ ssh root@sysou.com 'tail /var/log/nginx/error.log'
   - **W3「优」视觉包**：三层视差城市（0.55/0.3/0.12×）+ 600 窗灯 InstancedMesh 闪烁 + 昼夜循环（3000m，窗灯密度联动）；Runner 角色（双眼+天线灯+辉光+24 段光轨+尘土粒子，squash&stretch）；**激光预警示状态机**（暗→闪 0.8s→点亮 0.4s 致死，公平性）；12 齿 Extrude 锯；符文环门（×2 绿/护盾青/磁力金/boost 红/节奏紫）；网格滚动地板；屏幕 juice（2D canvas 速度线/节拍脉冲环/事件闪白 post.ts）+ 屏震 + FOV punch 62→68；**自适应三档画质**（0.5s FPS 窗口降档/10s 回升，T2 档节奏门只通过不判定，触控默认 T1 起步）；跳跃输入缓冲 150ms + 底屏长按滑铲
   - **新增机制**：Boost 门（2s 无敌 + 1.6× 爆发 + 吸金 +1000/s）；大金币（+1000 + 顿帧 0.05s）；**近失擦过**（<0.35m → +200×倍率 + CLOSE!）；连击（×1→×8，4s 衰减）；道具协同（黄金风暴=×2 门+磁力 / 铁壁火箭=护盾+boost）
   - **验收**：tsc 0 错；单测 **36/36** 绿（新增 6 个 RhythmGateJudge 回归）；vite 构建 gzip 242KB；chrome-devtools 实机（WebGL 强制后端，rAF 被遮挡节流 → 用 `?debug=1` 的 warpToM/warpBeat/step 手动驱动逻辑步做确定性验收）：节奏门 PERFECT→streak→**Groove 激活（三门全 PERFECT，GROOVE×1.5 飘字+HUD）**、Boost 门（speed 16.4→26.2、BOOST×1.6 飘字）、死亡结算（近失/flowPerfect/mode 字段渲染正确）、draw call 14/帧（≤64 ✓）、零 console 报错、实玩截图达「优」水准
-  - **发布**：manifest v1.0.0→**1.1.0**，metaSchema 增 `nearMisses`/`flowPerfect`/`mode`（平台按 metaSchema 通用校验，**后端零改动**），size.totalBytes=875120；待新会话走发布管线（打包 zip → 管理台上传 → 签名 JWT 验收）
+  - **发布 ✅ 2026-10-23 生产上线**：zip（248969B，4 文件）→ 本地生产密钥签 `pa=true` 管理 JWT（ES256/kid=sysou-2026-1/iss 含 /api）→ `POST /api/admin/packages`（packageId=d0cccaf0eab5）→ ready（needsReview=false）→ `POST /api/admin/versions/4/publish` → **LIVE 1.1.0**（sha256 `31f6c70c…` 与本地 zip 逐字节一致）；生产浏览器实机：WebGPU ✓、零 console 报错、结算屏新字段（近失/FLOW PERFECT）渲染、实玩运行正常。
+  - **探针配置生产修正（重要，02 文档 §6.4 已回写）**：首次发布探针失败自动回滚（`GAMEVAULT_NGINX_PROBE_BASE=http://127.0.0.1` 回环命中 nginx apex 308 跳转块 → 308 无 COOP/COEP 头）→ 改 `GAMEVAULT_NGINX_PROBE_BASE=https://www.sysou.com`（公网 base，更贴近玩家真实路径）+ 重启后端 → 二次发布成功。**回滚保护机制本身经生产验证生效**。
+  - 发布工具留档：`.pi-release/sign-jwt.mjs`（gitignored；密钥用用户已授权的本地备份 `D:/workspace/sysou-manage/keys/production-backup/jwt-priv.pem`，gitignored）；生产 env 备份 `/etc/gamevault.env.bak-probe-20261023`
 - [ ] 游戏 A 移动端触控真机验收（Android Chrome，02 文档 §8 清单）——浏览器模拟已过，待用户实际手机跑一遍（横屏/全屏/触屏操控/震动感）
 - [ ] 游戏 A 生产分数/成就数据清理（smoke 提交过 2 条：rbac-it@sysou.com 99999 + 12345，成就 FIRST_CLEAR/COMBO_30；留作展示或等用户示下再清）
 - [ ] 游戏 B 生产分数数据清理（测试提交 1 条：rbac-it@sysou.com 15000，成就 FIRST_1K；另有 1 条被拒审计行 clientTs 过早；等用户示下再清）
