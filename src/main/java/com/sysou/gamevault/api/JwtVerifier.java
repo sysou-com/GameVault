@@ -44,7 +44,7 @@ public class JwtVerifier {
         this.http = RestClient.create();
     }
 
-    public record VerifiedToken(String sub, String email, List<String> roles, boolean platformAdmin) {
+    public record VerifiedToken(String sub, String email, List<String> roles, boolean platformAdmin, long pv) {
     }
 
     public VerifiedToken verify(String token) {
@@ -68,8 +68,10 @@ public class JwtVerifier {
         @SuppressWarnings("unchecked")
         List<String> roles = c.get("roles", List.class);
         Boolean pa = c.get("pa", Boolean.class);
+        Number pvNum = c.get("pv", Number.class);
         return new VerifiedToken(c.getSubject(), c.get("email", String.class),
-                roles != null ? roles : List.of(), Boolean.TRUE.equals(pa));
+                roles != null ? roles : List.of(), Boolean.TRUE.equals(pa),
+                pvNum != null ? pvNum.longValue() : 0);
     }
 
     private ECPublicKey keyFor(String kid) {

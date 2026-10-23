@@ -3,6 +3,8 @@ package com.sysou.gamevault.api;
 import com.sysou.gamevault.catalog.CatalogApi;
 import com.sysou.gamevault.catalog.CatalogApi.GameCard;
 import com.sysou.gamevault.catalog.CatalogApi.LiveVersion;
+import com.sysou.gamevault.achievement.AchievementApi;
+import com.sysou.gamevault.leaderboard.LeaderboardApi;
 import com.sysou.gamevault.player.PlaySessionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -22,11 +24,13 @@ class ApiControllerTest {
 
     MockMvc mvc;
     CatalogApi catalog = mock(CatalogApi.class);
+    LeaderboardApi leaderboard = mock(LeaderboardApi.class);
+    AchievementApi achievements = mock(AchievementApi.class);
     PlaySessionService sessions = mock(PlaySessionService.class);
 
     void build() {
         mvc = MockMvcBuilders.standaloneSetup(
-                        new GamesController(catalog),
+                        new GamesController(catalog, leaderboard, achievements),
                         new PlayController(sessions))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -48,11 +52,13 @@ class ApiControllerTest {
         when(catalog.listLive()).thenReturn(List.of(
                 new GameCard("neon-raid", "霓虹突袭", null, "phaser-4", "typescript",
                         "/game/g/neon-raid/cover.png", new String[]{"arcade"}, lv)));
+        when(leaderboard.topScores(anyList(), anyInt())).thenReturn(java.util.Map.of());
 
         mvc.perform(get("/api/games"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].slug").value("neon-raid"))
-                .andExpect(jsonPath("$[0].liveVersion.version").value("1.0.0"));
+                .andExpect(jsonPath("$[0].liveVersion.version").value("1.0.0"))
+                .andExpect(jsonPath("$[0].topScores").isArray());
     }
 
     @Test

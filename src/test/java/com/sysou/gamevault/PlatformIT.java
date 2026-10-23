@@ -125,6 +125,29 @@ class PlatformIT {
         // 磁盘落位（02 文档 §2 目录布局）
         assertTrue(Files.exists(Path.of("target/it/games/it-rush/1.0.0/index.html")), "解压落位失败");
         assertTrue(Files.exists(Path.of("target/it/games/it-rush/1.0.0/manifest.json")));
+
+        // ---- M2：提分只收登录态（游客/垃圾令牌 → 401；01 文档 §5.2/§7 红线）----
+        mvc.perform(post("/api/scores")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
+        mvc.perform(post("/api/scores")
+                        .header("Authorization", "Bearer garbage.token.here")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/me")).andExpect(status().isUnauthorized());
+
+        // ---- M2：榜单公开读（it-rush 刚发布，空榜 → 空 entries；登录态才有 myRank）----
+        mvc.perform(get("/api/games/it-rush/leaderboard"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entries").isArray());
+
+        // ---- M2：目录卡片带 topScores（空榜 → 空数组）----
+        mvc.perform(get("/api/games"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.slug=='it-rush')].topScores").isArray());
     }
 
     private static byte[] buildZip(String slug, String version) throws Exception {

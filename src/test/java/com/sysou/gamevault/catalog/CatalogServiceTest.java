@@ -1,5 +1,6 @@
 package com.sysou.gamevault.catalog;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sysou.gamevault.catalog.entity.Game;
 import com.sysou.gamevault.catalog.entity.GameVersion;
 import com.sysou.gamevault.catalog.repo.GameRepository;
@@ -25,6 +26,8 @@ class CatalogServiceTest {
     GameRepository games;
     @Mock
     GameVersionRepository versions;
+    @Mock
+    ObjectMapper mapper;
 
     CatalogService service;
 
@@ -34,7 +37,7 @@ class CatalogServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CatalogService(games, versions);
+        service = new CatalogService(games, versions, mapper);
         game = new Game();
         game.setId(1L);
         game.setSlug("neon-raid");

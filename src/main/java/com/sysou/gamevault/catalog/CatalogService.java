@@ -5,6 +5,8 @@ import com.sysou.gamevault.catalog.entity.GameVersion;
 import com.sysou.gamevault.catalog.repo.GameRepository;
 import com.sysou.gamevault.catalog.repo.GameVersionRepository;
 import com.sysou.gamevault.common.api.ApiException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,10 +23,27 @@ public class CatalogService implements CatalogApi {
 
     private final GameRepository games;
     private final GameVersionRepository versions;
+    private final ObjectMapper mapper;
 
-    public CatalogService(GameRepository games, GameVersionRepository versions) {
+    public CatalogService(GameRepository games, GameVersionRepository versions, ObjectMapper mapper) {
         this.games = games;
         this.versions = versions;
+        this.mapper = mapper;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public JsonNode liveManifest(String slug) {
+        Game g = games.findBySlug(slug)
+                .filter(x -> "live".equals(x.getStatus()))
+                .orElseThrow(() -> ApiException.notFound("GAME_NOT_FOUND", "游戏不存在或未上架：" + slug));
+        GameVersion v = versions.findFirstByGameIdAndStatus(g.getId(), "live")
+                .orElseThrow(() -> ApiException.notFound("VERSION_NOT_FOUND", "游戏无 live 版本：" + slug));
+        try {
+            return mapper.readTree(v.getManifest());
+        } catch (Exception e) {
+            throw ApiException.badRequest("BAD_MANIFEST", "live 版本 manifest 解析失败：" + slug);
+        }
     }
 
     /** 目录（仅 live 游戏，含 live 版本信息）。 */

@@ -1,5 +1,6 @@
 package com.sysou.gamevault.catalog;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.sysou.gamevault.catalog.entity.GameVersion;
 
 import java.util.List;
@@ -10,6 +11,12 @@ public interface CatalogApi {
     List<GameCard> listLive();
 
     GameDetail detail(String slug);
+
+    /**
+     * live 版本冻结的 manifest.json（JsonNode；02 文档 §3.1）——leaderboard 取 score 规格、
+     * admin 发布时回写成就定义用。游戏不存在/未上架/无 live 版本 → 404 ApiException。
+     */
+    JsonNode liveManifest(String slug);
 
     void registerUpload(String slug, String title, String engine, String language,
                         String coverUrl, String manifestJson, String version,

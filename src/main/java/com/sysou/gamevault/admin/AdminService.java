@@ -2,6 +2,7 @@ package com.sysou.gamevault.admin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sysou.gamevault.achievement.AchievementApi;
 import com.sysou.gamevault.catalog.CatalogApi;
 import com.sysou.gamevault.catalog.entity.Game;
 import com.sysou.gamevault.catalog.entity.GameVersion;
@@ -28,6 +29,7 @@ import java.time.Duration;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.zip.ZipInputStream;
 
@@ -47,17 +49,19 @@ public class AdminService {
     private final GameRepository games;
     private final GameVersionRepository versions;
     private final CatalogApi catalogApi;
+    private final AchievementApi achievements;
     private final JobProducer producer;
     private final StringRedisTemplate redis;
     private final ObjectMapper mapper;
 
     public AdminService(GamevaultProps props, GameRepository games, GameVersionRepository versions,
-                        CatalogApi catalogApi, JobProducer producer,
+                        CatalogApi catalogApi, AchievementApi achievements, JobProducer producer,
                         StringRedisTemplate redis, ObjectMapper mapper) {
         this.props = props;
         this.games = games;
         this.versions = versions;
         this.catalogApi = catalogApi;
+        this.achievements = achievements;
         this.producer = producer;
         this.redis = redis;
         this.mapper = mapper;
@@ -137,19 +141,101 @@ public class AdminService {
                                 String entryUrl, String report, String version) {
     }
 
-    /** 发布（ready/live/rolled_back → live；同游戏原 live → rolled_back）+ 可选探针。 */
+    /**
+     * 发布（ready/live/rolled_back → live；同游戏原 live → rolled_back）。
+     * <p>M2 两道闸门：① needsReview 未确认 → 409（校验报告 review 项须人工确认，02 文档 §6）；
+     * ② 发布后探针失败 → 自动回滚上一 live（02 文档 §6.4）。
+     */
     public GameVersion publish(Long versionId) {
+        GameVersion target = versions.findById(versionId)
+                .orElseThrow(() -> ApiException.notFound("VERSION_NOT_FOUND", "版本不存在：" + versionId));
+        if (hasUnconfirmedReview(target)) {
+            throw ApiException.conflict("NEEDS_REVIEW_CONFIRM",
+                    "校验报告存在待人工审查项，请先在管理台确认后再发布");
+        }
+        Optional<GameVersion> prevLive = versions.findFirstByGameIdAndStatus(target.getGameId(), "live")
+                .filter(lv -> !lv.getId().equals(target.getId()));
         GameVersion v = catalogApi.publish(versionId);
-        probe(v);
+        ProbeResult pr = probe(v);
+        if (pr.failed() && prevLive.isPresent()) {
+            GameVersion prev = prevLive.get();
+            log.error("发布后探针失败，自动回滚 {} → {}（02 文档 §6.4）: {}", v.getVersion(), prev.getVersion(), pr.detail());
+            catalogApi.publish(prev.getId());
+            syncAchievements(prev); // 回滚后成就定义随回滚版本回写
+            throw ApiException.conflict("PROBE_FAILED_ROLLBACK",
+                    "发布后探针失败，已自动回滚到 " + prev.getVersion() + "：" + pr.detail());
+        }
+        syncAchievements(v);
         return v;
     }
 
-    /**
-     * 发布后探针（02 文档 §6.4）：回环请求 nginx，断言 200 + COOP/COEP 头。
-     * M1：失败仅告警日志（自动回滚 M2 随管理台一起落，见 02 文档 §8 验收清单）。
-     */
-    private void probe(GameVersion v) {
-        if (!props.nginxProbe().enabled()) return;
+    /** 发布时以包内为准回写成就定义（02 文档 §3.1；manifest.achievements 缺省 = 不动现有定义）。 */
+    private void syncAchievements(GameVersion v) {
+        try {
+            String slug = games.findById(v.getGameId()).map(Game::getSlug).orElse("");
+            achievements.syncFromManifest(slug, mapper.readTree(v.getManifest()));
+        } catch (Exception e) {
+            log.warn("成就定义回写失败 versionId={}: {}", v.getId(), e.toString());
+        }
+    }
+
+    /** M2：needsReview 人工确认（写 status_report.reviewConfirmedAt；重新上传新包会重置闸门）。 */
+    @Transactional
+    public void confirmReview(Long versionId) {
+        GameVersion v = versions.findById(versionId)
+                .orElseThrow(() -> ApiException.notFound("VERSION_NOT_FOUND", "版本不存在：" + versionId));
+        if (!"ready".equals(v.getStatus())) {
+            throw ApiException.conflict("NOT_READY", "仅 ready 版本可确认审查项，当前：" + v.getStatus());
+        }
+        if (!hasUnconfirmedReview(v)) {
+            throw ApiException.conflict("NOTHING_TO_CONFIRM", "该版本无待确认的审查项");
+        }
+        com.fasterxml.jackson.databind.node.ObjectNode o = reportNode(v);
+        o.put("reviewConfirmedAt", java.time.Instant.now().toString());
+        v.setStatusReport(o.toString());
+        versions.save(v);
+        log.info("needsReview 已确认 versionId={} slug v={}", versionId, v.getVersion());
+    }
+
+    /** 闸门判定：报告含 review 项且未确认（report 以字符串前缀 "review: " 标记审查项，见 PackageValidator）。 */
+    private boolean hasUnconfirmedReview(GameVersion v) {
+        com.fasterxml.jackson.databind.JsonNode rep = parseReport(v);
+        if (rep == null) return false;
+        if (rep.has("reviewConfirmedAt")) return false;
+        var arr = rep.path("report");
+        if (!arr.isArray()) return rep.path("needsReview").asBoolean(false);
+        for (var e : arr) {
+            if (e.isTextual() && e.asText().startsWith("review:")) return true;
+        }
+        return rep.path("needsReview").asBoolean(false);
+    }
+
+    private com.fasterxml.jackson.databind.JsonNode parseReport(GameVersion v) {
+        try {
+            String raw = v.getStatusReport();
+            if (raw == null || raw.isBlank()) return null;
+            return mapper.readTree(raw);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private com.fasterxml.jackson.databind.node.ObjectNode reportNode(GameVersion v) {
+        var rep = parseReport(v);
+        if (rep != null && rep.isObject()) return (com.fasterxml.jackson.databind.node.ObjectNode) rep;
+        return mapper.createObjectNode();
+    }
+
+    /** 探针结果（02 文档 §6.4）：DISABLED（dev 默认关）/ OK / FAILED(detail)。 */
+    private record ProbeResult(boolean failed, String detail) {
+        static ProbeResult disabled() { return new ProbeResult(false, "探针未启用"); }
+        static ProbeResult ok() { return new ProbeResult(false, ""); }
+        static ProbeResult failed(String detail) { return new ProbeResult(true, detail); }
+    }
+
+    /** 发布后探针（02 文档 §6.4）：回环请求 nginx，断言 200 + COOP/COEP 头；失败 → 自动回滚（M2 起）。 */
+    private ProbeResult probe(GameVersion v) {
+        if (!props.nginxProbe().enabled()) return ProbeResult.disabled();
         try {
             var resp = org.springframework.web.client.RestClient.create()
                     .get().uri(props.nginxProbe().baseUrl() + v.getEntryUrl())
@@ -159,10 +245,11 @@ public class AdminService {
                     resp.getHeaders().getFirst("Cross-Origin-Opener-Policy"))
                     && resp.getHeaders().getFirst("Cross-Origin-Embedder-Policy") != null;
             if (!resp.getStatusCode().is2xxSuccessful() || !headers) {
-                log.warn("探针异常 version={}: status={} coop/coep={}", v.getId(), resp.getStatusCode(), headers);
+                return ProbeResult.failed("status=" + resp.getStatusCode() + " coop/coep=" + headers);
             }
+            return ProbeResult.ok();
         } catch (Exception e) {
-            log.warn("探针失败 version={}（M2 起自动回滚）: {}", v.getId(), e.toString());
+            return ProbeResult.failed(e.toString());
         }
     }
 

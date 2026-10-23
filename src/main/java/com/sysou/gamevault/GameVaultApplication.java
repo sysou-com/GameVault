@@ -3,6 +3,7 @@ package com.sysou.gamevault;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * GameVault —— 游戏展示与试玩平台（docs/design/01）。
@@ -12,6 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
  */
 @SpringBootApplication
 @ConfigurationPropertiesScan
+@EnableScheduling   // M2：榜单定时 Job（SCORE_SETTLE 5min / LEADERBOARD_WEEK_RESET 周一 00:00）
 public class GameVaultApplication {
 
     public static void main(String[] args) {
