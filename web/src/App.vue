@@ -1,9 +1,18 @@
 <template>
   <div class="shell">
     <header class="topbar">
-      <router-link to="/" class="brand">
-        <span class="brand-dot"></span>GameVault<span class="brand-sub">游戏展示与试玩平台</span>
-      </router-link>
+      <div class="tb-left">
+        <button
+          v-if="isMobile"
+          class="hamburger" :class="{ open: menuOpen }"
+          :aria-label="menuOpen ? '关闭菜单' : '打开菜单'"
+          :aria-expanded="menuOpen"
+          @click="menuOpen = !menuOpen"
+        ><span /><span /><span /></button>
+        <router-link to="/" class="brand" @click="menuOpen = false">
+          <span class="brand-dot"></span>GameVault<span class="brand-sub">游戏展示与试玩平台</span>
+        </router-link>
+      </div>
       <nav class="nav">
         <router-link to="/">全部游戏</router-link>
         <router-link v-if="me && adminOk" to="/admin">管理台</router-link>
@@ -13,7 +22,25 @@
         </template>
         <button v-else class="btn primary small" @click="showLogin = true">登录</button>
       </nav>
+
+      <!-- 移动端菜单（点击展开；02 文档无涉，纯前端 UI；断点 ≤760px） -->
+      <transition name="menu">
+        <nav v-if="isMobile && menuOpen" class="mobile-menu" @click="menuOpen = false">
+          <router-link to="/" class="mm-item">全部游戏</router-link>
+          <router-link v-if="me && adminOk" to="/admin" class="mm-item">管理台</router-link>
+          <div class="mm-divider"></div>
+          <div v-if="me" class="mm-item mm-account">
+            <span class="mm-user" :title="me.email ?? me.id">{{ me.email ?? me.id.slice(0, 10) }}</span>
+            <button class="btn ghost small" @click.stop="onLogout">退出</button>
+          </div>
+          <div v-else class="mm-item mm-account">
+            <span class="muted">未登录——登录后可提交分数上榜单</span>
+            <button class="btn primary small" @click.stop="showLogin = true">登录</button>
+          </div>
+        </nav>
+      </transition>
     </header>
+    <div v-if="isMobile && menuOpen" class="menu-mask" @click="menuOpen = false"></div>
     <main class="content">
       <RouterView />
     </main>
@@ -45,11 +72,24 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterView } from 'vue-router'
 import { login, logout, restoreSession, user as me } from './session'
 import { api } from './api'
 
 const adminOk = ref(false)
+
+/** 移动端断点（≤760px 进汉堡菜单）；监听 resize 实时切换。 */
+const isMobile = ref(typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches)
+const menuOpen = ref(false)
+let mq: MediaQueryList | undefined
+function onMqChange() { if (isMobile.value) menuOpen.value = false }
+onMounted(() => {
+  mq = window.matchMedia('(max-width: 760px)')
+  mq.addEventListener('change', onMqChange)
+})
+onBeforeUnmount(() => mq?.removeEventListener('change', onMqChange))
+watch(me, () => { menuOpen.value = false })
 
 /** 拉应用侧权限快照（/api/me/perm，中心 RBAC 裁定 #21）：有任一 gamevault:admin:* 点或 pa → 管理台可见。 */
 async function refreshPerm() {
@@ -95,11 +135,12 @@ onMounted(() => {
 
 <style scoped>
 .topbar {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 12px 22px; border-bottom: 1px solid var(--line);
   background: var(--bg-panel);
   position: sticky; top: 0; z-index: 10;
 }
+.tb-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; color: var(--text); text-decoration: none; }
 .brand-dot { width: 10px; height: 10px; border-radius: 3px; background: var(--neon); box-shadow: 0 0 8px var(--neon); }
 .brand-sub { font-size: 12px; font-weight: 400; color: var(--text-dim); }
@@ -110,6 +151,51 @@ onMounted(() => {
   max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--text-dim); font-size: 13px;
 }
+
+/* 移动端：顶栏压缩 + 汉堡按钮 */
+.hamburger {
+  width: 40px; height: 40px; flex: none; display: grid; place-content: center; gap: 4px;
+  background: transparent; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; padding: 0;
+}
+.hamburger:hover { border-color: var(--neon); }
+.hamburger span {
+  display: block; width: 18px; height: 2px; border-radius: 2px; background: var(--text);
+  transition: transform 0.2s ease, opacity 0.15s ease;
+}
+.hamburger.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+/* 下拉菜单：顶栏正下方全宽卡片（滑入动效） */
+.mobile-menu {
+  position: absolute; top: calc(100% + 8px); left: 10px; right: 10px; z-index: 11;
+  display: flex; flex-direction: column;
+  background: rgba(17, 22, 36, 0.97); backdrop-filter: blur(10px);
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(34, 211, 238, 0.08);
+}
+.mm-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 48px; padding: 10px 16px; font-size: 15px;
+  color: var(--text-dim); text-decoration: none; cursor: pointer;
+}
+.mm-item:hover { color: var(--text); background: rgba(34, 211, 238, 0.06); text-decoration: none; }
+.mm-item.router-link-active { color: var(--neon); }
+.mm-account { color: var(--text); font-size: 13px; }
+.mm-user { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.mm-divider { height: 1px; background: var(--line); flex: none; }
+.menu-mask { position: fixed; inset: 0; top: 0; background: rgba(0, 0, 0, 0.4); z-index: 9; }
+.menu-enter-active { transition: transform 0.18s ease, opacity 0.18s ease; }
+.menu-leave-active { transition: transform 0.14s ease, opacity 0.14s ease; }
+.menu-enter-from, .menu-leave-to { transform: translateY(-8px); opacity: 0; }
+
+@media (max-width: 760px) {
+  .topbar { padding: 8px 12px; }
+  .brand { font-size: 15px; }
+  .brand-sub { display: none; }
+  .nav { display: none; } /* 桌面导航由 .mobile-menu 取代 */
+}
+
 .modal-mask {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
   display: flex; align-items: center; justify-content: center; z-index: 100;

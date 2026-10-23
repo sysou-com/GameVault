@@ -208,4 +208,9 @@ async function refreshBoardAndMine() {
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
 }
+@media (max-width: 760px) {
+  .head { margin-bottom: 12px; }
+  .head .title { font-size: 20px; }
+  .badges { gap: 6px; }
+}
 </style>

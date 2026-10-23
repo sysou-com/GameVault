@@ -1,16 +1,20 @@
 <template>
   <div class="player">
     <div class="player-bar">
-      <span class="muted">试玩窗口</span>
+      <span class="muted bar-label">试玩窗口</span>
       <span v-if="state === 'timeout'" class="warn">加载超时</span>
       <span v-if="error" class="err">{{ error }}</span>
       <span v-if="scoreToast" class="ok">{{ scoreToast }}</span>
       <span class="spacer"></span>
       <button class="btn" @click="restart" :disabled="state !== 'ready'">重新开始</button>
       <button class="btn" @click="clearSave" :disabled="state !== 'ready'">清空存档</button>
+      <button class="btn fs-btn" @click="toggleFs" :disabled="state !== 'ready'" title="全屏试玩" aria-label="全屏">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        <span class="fs-label">全屏</span>
+      </button>
     </div>
 
-    <div class="stage">
+    <div ref="stageRef" class="stage">
       <div v-if="state === 'loading'" class="overlay">
         <div class="spinner"></div>
         <p>游戏加载中（约 {{ (sizeBytes / 1024 / 1024).toFixed(1) }} MB）…</p>
@@ -33,9 +37,14 @@
         :src="frameSrc"
         :sandbox="SANDBOX"
         :allow="ALLOW"
-        referrerpolicy="no-referrer-when-downgrade"
+        allowfullscreen
+        :referrerpolicy="no-referrer-when-downgrade"
         @load="onLoad"
       ></iframe>
+
+      <!-- 全屏态浮层控件：退出按钮 + 竖屏横屏提示（触屏） -->
+      <button v-if="isFs" class="fs-exit" @click="toggleFs" aria-label="退出全屏">✕</button>
+      <div v-if="isFs && isTouch && isPortrait" class="fs-rotate">📱 横屏体验更好</div>
     </div>
 
     <div v-if="isTouch" class="touch-hint">
@@ -77,6 +86,8 @@ const frameSrc = ref('')
 const scoreToast = ref('')
 
 const isTouch = typeof window !== 'undefined' && 'ontouchstart' in window
+const isPortrait = ref(typeof window !== 'undefined' && window.matchMedia('(orientation: portrait)').matches)
+const isFs = ref(false)
 const TIMEOUT_MS = 20_000
 let timer: number | undefined
 const startTs = { v: Date.now() }
@@ -145,6 +156,46 @@ function retry() { startLoading() }
 function restart() { post('platform:restart') }
 function clearSave() { post('platform:clearSave') }
 
+// ---------- 全屏（纯前端能力；iOS 16+ / Android / 桌面均支持容器级 requestFullscreen） ----------
+const stageRef = ref<HTMLDivElement | null>(null)
+let portraitMq: MediaQueryList | undefined
+const onPortraitChange = (e: MediaQueryListEvent) => { isPortrait.value = e.matches }
+
+async function toggleFs() {
+  const el = stageRef.value
+  if (!el) return
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen()
+    } else if (el.requestFullscreen) {
+      // navigationUI: 'hide' —— 全屏时隐藏移动端浏览器地址栏，把屏幕让给游戏（不支持的浏览器忽略该参数）
+      await el.requestFullscreen({ navigationUI: 'hide' } as Parameters<typeof el.requestFullscreen>[0])
+    } else if (el.webkitRequestFullscreen) {
+      el.webkitRequestFullscreen()
+    } else {
+      toast('当前浏览器不支持全屏')
+    }
+  } catch { /* 手势被拒/嵌套全屏等：静默 */ }
+}
+
+function onFsChange() {
+  isFs.value = !!document.fullscreenElement
+  if (isFs.value && isTouch) {
+    // 触屏全屏尝试锁定横屏（仅 Android 支持；不支持则静默降级——游戏 FIT 缩放横竖屏均可玩）
+    void (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.('landscape').catch(() => {})
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('message', onMessage)
+  document.addEventListener('fullscreenchange', onFsChange)
+  document.addEventListener('webkitfullscreenchange', onFsChange)
+  portraitMq = window.matchMedia('(orientation: portrait)')
+  isPortrait.value = portraitMq.matches
+  portraitMq.addEventListener('change', onPortraitChange)
+  startLoading()
+})
+
 /**
  * 模式二提分（02 文档 §4.2）：平台拿内存 token 代发 POST /api/scores，
  * 结果回 platform:score-result（游戏据此展示排名/解锁；同源模式游戏自己 fetch，不走这里）。
@@ -185,12 +236,11 @@ function toast(msg: string) {
   window.setTimeout(() => { scoreToast.value = '' }, 6000)
 }
 
-onMounted(() => {
-  window.addEventListener('message', onMessage)
-  startLoading()
-})
 onBeforeUnmount(() => {
   window.removeEventListener('message', onMessage)
+  document.removeEventListener('fullscreenchange', onFsChange)
+  document.removeEventListener('webkitfullscreenchange', onFsChange)
+  portraitMq?.removeEventListener('change', onPortraitChange)
   clearTimer()
   // 试玩会话结束（M1 最小：时长 + 是否完成=已 ready）
   const durMs = Date.now() - startTs.v
@@ -206,7 +256,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .player { display: flex; flex-direction: column; gap: 10px; }
-.player-bar { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.player-bar { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
 .spacer { flex: 1; }
 .stage {
   position: relative;
@@ -216,6 +266,28 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
+}
+/* 全屏态：容器占满视口（16:9 游戏由 Phaser FIT 自适配，竖屏自动上下留黑边） */
+.stage:fullscreen, .stage:-webkit-full-screen {
+  width: 100vw; height: 100vh; aspect-ratio: auto;
+  border: 0; border-radius: 0;
+}
+.fs-btn { display: inline-flex; align-items: center; gap: 6px; }
+.fs-exit {
+  position: absolute; top: 10px; right: 10px; z-index: 5;
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line);
+  background: rgba(17, 22, 36, 0.85); color: var(--text); font-size: 15px; cursor: pointer;
+}
+.fs-exit:hover { border-color: var(--neon); color: var(--neon); }
+.fs-rotate {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 5;
+  font-size: 13px; color: var(--text); background: rgba(17, 22, 36, 0.85);
+  border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; white-space: nowrap;
+  animation: rotate-hint 2.4s ease-in-out infinite;
+}
+@keyframes rotate-hint {
+  0%, 100% { transform: translateX(-50%) rotate(0deg); }
+  50% { transform: translateX(-50%) rotate(90deg); }
 }
 .game-frame { width: 100%; height: 100%; border: 0; display: block; touch-action: manipulation; }
 .overlay {
@@ -233,5 +305,11 @@ onBeforeUnmount(() => {
   font-size: 12px; color: var(--text-dim);
   background: var(--bg-panel); border: 1px solid var(--line);
   border-radius: 8px; padding: 8px 12px; text-align: center;
+}
+@media (max-width: 760px) {
+  .bar-label { display: none; }        /* 腾出空间给按钮 */
+  .player-bar { gap: 8px; }
+  .player-bar .btn { padding: 6px 10px; font-size: 12px; }
+  .stage { border-radius: 10px; }      /* 手机上稍微紧凑 */
 }
 </style>

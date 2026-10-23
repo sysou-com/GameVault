@@ -49,6 +49,18 @@ a:hover { text-decoration: underline; }
 }
 
 /* 通用 */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ---------- 移动端（≤760px）：页面留白压缩，把宽度让给内容/试玩窗口 ---------- */
+@media (max-width: 760px) {
+  body { font-size: 14px; }
+  .content { padding: 16px 10px 40px; }
+  .footer { padding: 12px 14px; flex-direction: column; gap: 2px; }
+  .panel { padding: 12px; }
+  /* 表格横向滚动（管理台/榜单） */
+  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
 .badge {
   display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
   border: 1px solid var(--line); color: var(--text-dim); background: var(--bg-panel);
