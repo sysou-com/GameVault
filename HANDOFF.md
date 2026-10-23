@@ -1,9 +1,9 @@
-# HANDOFF — 会话交接（2026-10-23，M1+M2+游戏 A 生产均已上线；移动端适配已部署；用户试玩反馈 →「优/奇」标准文档修订；下一步 M3）
+# HANDOFF — 会话交接（2026-10-23，M1+M2+游戏 A 生产均已上线；移动端适配已部署；游戏 B「方块狂奔」核心完成+生产上线（W3「优」视觉包待做）；用户试玩反馈 →「优/奇」标准文档修订）
 
 > 新会话开场协议：先 `git fetch origin && git status -sb` 同步 → 读 `CLAUDE.md`（红线+入口）→
 > 读本文件（当前状态）→ 按任务读 `docs/design/` 对应章节。**冲突优先级：用户裁定 > docs/design > 本文件 > 代码现状。**
 
-## 一、当前状态（M1 ✅ 上线；M2 ✅ 生产上线；游戏 A「霓虹突袭」✅ 2026-10-23 生产上线；移动端适配 ✅ 已部署）
+## 一、当前状态（M1 ✅ 上线；M2 ✅ 生产上线；游戏 A「霓虹突袭」✅ 2026-10-23 生产上线；移动端适配 ✅ 已部署；游戏 B「方块狂奔」✅ 2026-10-23 核心完成+生产上线，W3 视觉包待做）
 
 **生产已跑通**（https://sysou.com/game/ → 308 → www.sysou.com/game/，M1 状态）：
 - 后端 `gamevault.service`（systemd，`/opt/java21/current` JVM，127.0.0.1:8094，PG 生产库 `gamevault`，Redis db4）
@@ -35,7 +35,7 @@
 - **2026-10-23 用户试玩反馈 + 「优/奇」质量标准（设计文档已修订，见 §九）**：游戏 D「太简单没可玩性」、
   游戏 B「画面粗糙只有方块/长条/圆，比不过同类 XX 快跑」→ 00 文档 §3.4 新增标准 + 5 份游戏文档修订
   （04 为大改：W3=「优」视觉包、W4=节拍系统（奇点）、v1.1=幽灵竞速/角色三件套；01 文档 §6.3 新增每日挑战榜）；
-  `games/cube-rush/` 代码（W1/W2 完成，~2200 行）**未提交**，处理建议见 §九
+  `games/cube-rush/` 代码 **已提交 + 生产部署**（本会话：根治 2 个 WebGPU bug，验收全绿，见 §九）；W3「优」视觉包 + W4「奇」节拍系统**由新会话处理**
 - 测试：52 单测 + PlatformIT 2（含「本地 JWKS + 本地 /perms 模拟中心」的签名 JWT 全链路：
   验签→提分→榜→settle→成就→RBAC 401/403/200；`-Dgamevault.it.enabled=true -Dtest=PlatformIT`）
 
@@ -98,8 +98,11 @@ ssh root@sysou.com 'tail /var/log/nginx/error.log'
 
 - [x] ~~**生产部署 M2**~~ **✅ 2026-10-23 完成**（中心 V14 + 令牌 env → GameVault env → deploy.sh → SMOKE PASS → 签名 JWT 验收全绿，见 §六）
 - [x] ~~**游戏 A 生产部署**~~ **✅ 2026-10-23 完成**（见 §八 执行记录）
+- [x] ~~**游戏 B「方块狂奔」核心实现 + 生产部署**~~ **✅ 2026-10-23 完成**（Three.js r186 WebGPU/WebGL2 双后端、零资产；根治 2 个 WebGPU bug；生产验收全绿，见 §九）
+- [ ] 游戏 B W3「优」视觉包 + W4「奇」节拍系统（**新会话处理**，04 文档 §1.3/§4）
 - [ ] 游戏 A 移动端触控真机验收（Android Chrome，02 文档 §8 清单）——浏览器模拟已过，待用户实际手机跑一遍（横屏/全屏/触屏操控/震动感）
 - [ ] 游戏 A 生产分数/成就数据清理（smoke 提交过 2 条：rbac-it@sysou.com 99999 + 12345，成就 FIRST_CLEAR/COMBO_30；留作展示或等用户示下再清）
+- [ ] 游戏 B 生产分数数据清理（测试提交 1 条：rbac-it@sysou.com 15000，成就 FIRST_1K；另有 1 条被拒审计行 clientTs 过早；等用户示下再清）
 - [x] ~~01 文档 §10 ArchUnit 模块边界测试、@WebMvcTest 假 JWT 测试~~ —— M2 已用更硬的替代：
   PlatformIT 本地 JWKS + 本地 /perms 模拟中心，签名 JWT 全链路（含 RBAC 401/403）覆盖验签/回源真实路径
 - [ ] 首页暂无「搜索/筛选」（06 游戏全量后需要）；`play_event_daily` 埋点（M3）
@@ -147,7 +150,7 @@ ssh root@sysou.com 'tail /var/log/nginx/error.log'
 
 ## 七、M2 之后的顺序（01 文档 §11）
 
-M3：游戏 B（方块狂奔 Three.js）+ 运营统计（`play_event_daily` 聚合 Job）+ 云存档（user_save 已有表，存档 API）。
+M3：游戏 B（方块狂奔 Three.js —— ✅ 核心完成+生产上线，W3「优」视觉包 + W4「奇」节拍系统待做）+ 运营统计（`play_event_daily` 聚合 Job）+ 云存档（user_save 已有表，存档 API）。
 M4：游戏 C（地牢回声 Godot 4.6 WASM）+ COOP/COEP 加固。M5（二期）：游戏 E WebSocket 对战。
 
 ## 八、游戏 A 生产部署（✅ 2026-10-23 完成；留档备查）
@@ -202,10 +205,16 @@ M4：游戏 C（地牢回声 Godot 4.6 WASM）+ COOP/COEP 加固。M5（二期�
 （凭什么新/怎么玩/为何没火）→ 优化升级，或与本平台技术路线（零资产合成/WebGPU/排行榜+云存档）
 结合形成设计；调研结果随来源+日期回写对应游戏文档。
 
-**cube-rush 代码状态（2026-10-23 更新）**：**另一会话正在调测/改动，任何会话暂不动该目录代码**（用户裁定）。
-已设定时检查 `cube-rush-stability-check`（每 4h 一次，脚本 `dev-cube-rush-watch.mjs`，状态 `.pi/cube-rush-watch-state.json`）：
-目录连续两次检查无变化（≈8h 稳定）后检查会主动提醒用户开始 W3；**用户确认后删除该定时任务**（schedule 管理动作）。
-用户确认开工后的顺序：提交为 M3-W2 基线 → 按 04 文档 §4 进 W3（「优」视觉包）。
+**cube-rush 代码状态（2026-10-23 更新）**：游戏 B「方块狂奔」**核心实现完成 + 生产部署**（本会话）：
+- 核心逻辑/渲染/输入/音频/UI + 平台 bridge 全完成；单测 16/16；包体 808KB（gzip 224KB）。
+- **根治 2 个 WebGPU bug**（均找到根因并消除，非压制）：
+  ① `Buffer used in submit while destroyed`（chunk 生命周期建/毁几何 → GPU buffer churn，stale bind group 指向已销毁 buffer）
+  → 全部几何改共享单例（启动建一次、永不 dispose），glow 由 Sprite 换共享平面 Mesh；
+  ② `swapchain texture of size 0`（平台 iframe 布局未定瞬时 0 尺寸）→ resize 遇 0 忽略 + `ResizeObserver` 可靠捕获 0→确定尺寸 + frame loop 0 尺寸跳过 render。
+- 生产验收全绿：浏览器实玩零 console 报错、WebGPU ✓、提分 rank1 + 成就 FIRST_1K 解锁、排行榜（全服/周）、
+  匿名 401、COOP/COEP；sha256 `f523216a…` 与本地构建一致。提交 `d9b7ed7`（核心实现+buffer bug）+ `011a0b8`（size-0 bug）。
+- 代码保护机制（定时检查 `cube-rush-stability-check` + `dev-cube-rush-watch.mjs` + 状态文件）**已删除**（用户 2026-10-23 确认：本会话工作完成，保护暂不需要）。
+- 下一步 **W3（「优」视觉包）+ W4（「奇」节拍系统）由新会话处理**，按 04 文档 §1.3/§4：光轨/squash/障碍动效+预警示/3 层视差+昼夜/速度线/屏震 + 节拍生成系统。
 
 **新规则（用户裁定 2026-10-23）**：**手机端操作兼容是每款游戏的硬性要求**——触控操作（滑动/虚拟摇杆/屏幕按钮，
 触控目标 ≥48px）+ 横屏提示/全屏按钮 + 移动端降档画质；CLAUDE.md §二红线与 00 §3.4「优」自检已同步。

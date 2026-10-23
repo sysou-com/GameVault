@@ -8,8 +8,8 @@
   "entry": "index.html",
   "cover": "cover.svg",
   "size": {
-    "totalBytes": 819135,
-    "initialLoadBytes": 819135,
+    "totalBytes": 819711,
+    "initialLoadBytes": 819711,
     "maxAssetBytes": 200000000
   },
   "viewport": {
